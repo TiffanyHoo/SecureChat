@@ -8,6 +8,9 @@ using SecureChat.Core.Protocol;
 
 namespace SecureChat.App.ViewModels;
 
+/// <summary>OVER 挂断协商的本方所处阶段:空闲 / 已发出请求等待对方 / 对方请求待回应。</summary>
+public enum OverPhase { Idle, WaitingPeer, PeerAsking }
+
 /// <summary>
 /// 主界面视图模型:房间创建/加入(房间码流程)、消息收发、密钥状态展示。
 /// 所有 Core 事件经 DispatcherQueue 封送回 UI 线程。
@@ -29,11 +32,13 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _hostIp = "";        // 创建房间使用的本机 IP
     [ObservableProperty] private string _generatedCode = ""; // 创建房间后生成的房间码
     [ObservableProperty] private string _roomCodeInput = ""; // 加入方粘贴的房间码
+    [ObservableProperty] private OverPhase _overPhase = OverPhase.Idle; // OVER 挂断协商状态机
 
     private SecureConnection? _connection;
     private DispatcherQueue? _dispatcher;
     private DispatcherQueueTimer? _tickTimer;
     private bool _rekeying;
+    private bool _overEnding; // OVER 结束流程进行中,屏蔽后续重复触发
 
     /// <summary>本机候选监听 IP(私网优先),多网卡场景由用户在下拉框选择。</summary>
     public IReadOnlyList<string> HostIps { get; }
@@ -55,6 +60,18 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnListenModeIndexChanged(int value) => OnPropertyChanged(nameof(IsListenMode));
 
+    public bool IsOverIdle => OverPhase == OverPhase.Idle;
+    public bool IsOverWaiting => OverPhase == OverPhase.WaitingPeer;
+    /// <summary>已连接且 OVER 空闲:顶部 OVER 按钮可见。</summary>
+    public bool IsOverIdleAndConnected => OverPhase == OverPhase.Idle && IsConnected;
+
+    partial void OnOverPhaseChanged(OverPhase value)
+    {
+        OnPropertyChanged(nameof(IsOverIdle));
+        OnPropertyChanged(nameof(IsOverWaiting));
+        OnPropertyChanged(nameof(IsOverIdleAndConnected));
+    }
+
     public bool CanConfigure => !IsConnected && !IsBusy;
     public bool CanChat => IsConnected && !IsBusy;
     /// <summary>断开在"监听等待中(可取消)"或"已连接"时可用——等待对方加入期间也必须能取消。</summary>
@@ -65,6 +82,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CanConfigure));
         OnPropertyChanged(nameof(CanChat));
         OnPropertyChanged(nameof(CanDisconnect));
+        OnPropertyChanged(nameof(IsOverIdleAndConnected));
     }
 
     partial void OnIsBusyChanged(bool value)
@@ -118,6 +136,7 @@ public partial class MainViewModel : ObservableObject
 
         IsBusy = true;
         Messages.Clear();
+        ResetOverState();
         SecureConnection? conn = null;
         try
         {
@@ -171,6 +190,7 @@ public partial class MainViewModel : ObservableObject
 
         IsBusy = true;
         Messages.Clear();
+        ResetOverState();
         SecureConnection? conn = null;
         try
         {
@@ -251,9 +271,12 @@ public partial class MainViewModel : ObservableObject
         {
             if (!ReferenceEquals(_connection, conn)) return;
             IsConnected = false;
+            ResetOverState();
             StatusText = "已断开: " + reason;
             AddSystem("连接已断开。");
         });
+
+        conn.OverReceived += kind => Marshal(() => _ = HandleOverReceivedAsync(conn, kind));
     }
 
     // ─────────────────────────── 收发 ───────────────────────────
@@ -302,6 +325,140 @@ public partial class MainViewModel : ObservableObject
         {
             _rekeying = false;
         }
+    }
+
+    // ─────────────────────────── OVER 挂断协商 ───────────────────────────
+
+    /// <summary>按下 OVER:向对方发出结束请求,进入等待;期间可撤回。双方同时按下视为默契,直接结束。</summary>
+    [RelayCommand]
+    private async Task SendOverAsync()
+    {
+        var conn = _connection;
+        if (conn is null || !IsConnected || OverPhase != OverPhase.Idle || _overEnding) return;
+
+        OverPhase = OverPhase.WaitingPeer;
+        AddSystem("📻 你按下了 OVER,等待对方回应…");
+        try
+        {
+            await conn.SendOverAsync("request");
+        }
+        catch (Exception ex)
+        {
+            OverPhase = OverPhase.Idle;
+            AddSystem("OVER 发送失败: " + ReasonOf(ex));
+        }
+    }
+
+    /// <summary>撤回本方已发出的 OVER 请求。</summary>
+    [RelayCommand]
+    private async Task CancelOverAsync()
+    {
+        var conn = _connection;
+        if (conn is null || OverPhase != OverPhase.WaitingPeer || _overEnding) return;
+
+        OverPhase = OverPhase.Idle;
+        AddSystem("你撤回了 OVER,继续聊~");
+        try { await conn.SendOverAsync("cancel"); } catch { /* 断线时静默 */ }
+    }
+
+    /// <summary>回应对方弹出的 OVER 卡片(接受=挂断 / 拒绝=继续聊)。</summary>
+    public async Task RespondOverAsync(bool accept)
+    {
+        var conn = _connection;
+        if (conn is null || OverPhase != OverPhase.PeerAsking || _overEnding) return;
+
+        RemoveOverCard();
+        if (accept)
+        {
+            OverPhase = OverPhase.Idle;
+            try { await conn.SendOverAsync("accept"); } catch { }
+            await FinishOverAsync("对方接受了 OVER");
+        }
+        else
+        {
+            OverPhase = OverPhase.Idle;
+            AddSystem("你按了『不 over』,还想跟对方聊~");
+            try { await conn.SendOverAsync("reject"); } catch { }
+        }
+    }
+
+    private async Task HandleOverReceivedAsync(SecureConnection conn, string kind)
+    {
+        if (!ReferenceEquals(_connection, conn) || _overEnding) return;
+        switch (kind)
+        {
+            case "request":
+                if (OverPhase == OverPhase.WaitingPeer)
+                {
+                    // 双方同时按下 OVER → 默契,直接结束
+                    try { await conn.SendOverAsync("accept"); } catch { }
+                    await FinishOverAsync("默契 OVER!你们同时按下了按钮");
+                }
+                else if (OverPhase == OverPhase.Idle)
+                {
+                    OverPhase = OverPhase.PeerAsking;
+                    Messages.Add(new ChatMessage
+                    {
+                        Content = "对方按下了 OVER,要结束这次通话吗?",
+                        IsSystem = true,
+                        IsOverCard = true,
+                    });
+                }
+                // PeerAsking 期间又收到 request(对端重发) → 忽略,卡片仍在
+                break;
+
+            case "accept":
+                OverPhase = OverPhase.Idle;
+                await FinishOverAsync("对方接受了 OVER");
+                break;
+
+            case "reject":
+                OverPhase = OverPhase.Idle;
+                AddSystem("对方按了『不 over』,还想跟你聊~");
+                break;
+
+            case "cancel":
+                OverPhase = OverPhase.Idle;
+                RemoveOverCard();
+                AddSystem("对方撤回了 OVER,继续聊~");
+                break;
+        }
+    }
+
+    /// <summary>双方达成一致 → 告别动画 → 清空记录 → 断开。对称执行,重复进入由 _overEnding 挡住。</summary>
+    private async Task FinishOverAsync(string reason)
+    {
+        if (_overEnding) return;
+        _overEnding = true;
+        OverPhase = OverPhase.Idle;
+        RemoveOverCard();
+        AddSystem("📻 OVER & OUT · " + reason + ",通话结束,回见!");
+        StatusText = "通话已结束(OVER)";
+
+        await Task.Delay(1200); // 留一瞬让告别语可见
+
+        var conn = _connection;
+        Messages.Clear();
+        if (conn is null) { _overEnding = false; return; }
+        if (ReferenceEquals(_connection, conn)) _connection = null;
+        _overEnding = false;
+        GeneratedCode = string.Empty; // 作废房间码
+        await conn.DisconnectAsync("OVER 结束");
+        await conn.DisposeAsync();
+    }
+
+    private void ResetOverState()
+    {
+        _overEnding = false;
+        OverPhase = OverPhase.Idle;
+        RemoveOverCard();
+    }
+
+    private void RemoveOverCard()
+    {
+        for (int i = Messages.Count - 1; i >= 0; i--)
+            if (Messages[i].IsOverCard)
+                Messages.RemoveAt(i);
     }
 
     // ─────────────────────────── 状态刷新 ───────────────────────────
