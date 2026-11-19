@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{FBCA3EBA-9EDA-4F33-8F47-A70B20FA6205}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureChat.Core", "src\SecureChat.Core\SecureChat.Core.csproj", "{45ACFBFF-EBE9-4A15-895E-33255CB2E160}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{1F891FCB-B505-4899-8899-F193B365EE32}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureChat.Core.Tests", "tests\SecureChat.Core.Tests\SecureChat.Core.Tests.csproj", "{F49EBA45-7F0A-4A20-9072-AB4B53DDACC5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureChat.App", "src\SecureChat.App\SecureChat.App.csproj", "{4024E550-032A-4420-8033-DDDEA8CBC60C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{45ACFBFF-EBE9-4A15-895E-33255CB2E160}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45ACFBFF-EBE9-4A15-895E-33255CB2E160}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45ACFBFF-EBE9-4A15-895E-33255CB2E160}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45ACFBFF-EBE9-4A15-895E-33255CB2E160}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F49EBA45-7F0A-4A20-9072-AB4B53DDACC5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F49EBA45-7F0A-4A20-9072-AB4B53DDACC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F49EBA45-7F0A-4A20-9072-AB4B53DDACC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F49EBA45-7F0A-4A20-9072-AB4B53DDACC5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4024E550-032A-4420-8033-DDDEA8CBC60C}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{4024E550-032A-4420-8033-DDDEA8CBC60C}.Debug|Any CPU.Build.0 = Debug|x64
+		{4024E550-032A-4420-8033-DDDEA8CBC60C}.Release|Any CPU.ActiveCfg = Release|x64
+		{4024E550-032A-4420-8033-DDDEA8CBC60C}.Release|Any CPU.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{45ACFBFF-EBE9-4A15-895E-33255CB2E160} = {FBCA3EBA-9EDA-4F33-8F47-A70B20FA6205}
+		{F49EBA45-7F0A-4A20-9072-AB4B53DDACC5} = {1F891FCB-B505-4899-8899-F193B365EE32}
+		{4024E550-032A-4420-8033-DDDEA8CBC60C} = {FBCA3EBA-9EDA-4F33-8F47-A70B20FA6205}
+	EndGlobalSection
+EndGlobal
