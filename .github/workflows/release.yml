@@ -1,0 +1,52 @@
+name: Build & Package
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore SecureChat.sln
+
+      - name: Build
+        run: dotnet build SecureChat.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/SecureChat.Core.Tests/SecureChat.Core.Tests.csproj -c Release --no-build
+
+      - name: Publish (win-x64, self-contained, single file)
+        run: dotnet publish src/SecureChat.App/SecureChat.App.csproj -c Release -r win-x64 --self-contained true -o publish
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SecureChat-win-x64
+          path: publish/SecureChat.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $tag = "v1.0.${{ github.run_number }}"
+          gh release create $tag publish/SecureChat.exe `
+            --target "${{ github.sha }}" `
+            --title "SecureChat $tag" `
+            --notes "自动构建：合入 main 分支出包（commit ${{ github.sha }}）"
