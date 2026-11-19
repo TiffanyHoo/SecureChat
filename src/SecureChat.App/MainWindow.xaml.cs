@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
         this.InitializeComponent();
         Title = _baseTitle;
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        AppWindow.SetIcon("Assets/app.ico"); // 标题栏/Alt+Tab 图标(exe 图标由 csproj 管,窗口要单独设)
         Vm.Initialize(DispatcherQueue);
 
         ApplyWindowSize();

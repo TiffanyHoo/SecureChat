@@ -65,11 +65,24 @@ internal static class TrayIcon
         uID = TrayId,
         uFlags = NifMessage | NifIcon | NifTip,
         uCallbackMessage = WmTrayCallback,
-        hIcon = Native.LoadIconW(IntPtr.Zero, (IntPtr)32512 /*IDI_APPLICATION*/),
+        hIcon = LoadAppIcon(),
         szTip = "SecureChat:双击显示窗口,右键可退出",
         szInfo = string.Empty,
         szInfoTitle = string.Empty,
     };
+
+    private static IntPtr _appIcon;
+
+    /// <summary>加载应用图标(小尺寸,适配托盘);文件缺失时回退系统默认,保证托盘不空白。</summary>
+    private static IntPtr LoadAppIcon()
+    {
+        if (_appIcon != IntPtr.Zero) return _appIcon;
+        int size = Native.GetSystemMetrics(49); // SM_CXSMICON
+        _appIcon = Native.LoadImageW(IntPtr.Zero, "Assets/app.ico", 1 /*IMAGE_ICON*/, size, size, 0x0010 /*LR_LOADFROMFILE*/);
+        if (_appIcon == IntPtr.Zero)
+            _appIcon = Native.LoadIconW(IntPtr.Zero, (IntPtr)32512 /*IDI_APPLICATION*/);
+        return _appIcon;
+    }
 
     private static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
@@ -174,6 +187,12 @@ internal static class TrayIcon
 
         [DllImport("user32.dll")]
         internal static extern IntPtr LoadIconW(IntPtr hInstance, IntPtr lpIconName);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        internal static extern IntPtr LoadImageW(IntPtr hInst, string lpszName, uint uType, int cx, int cy, uint fuLoad);
+
+        [DllImport("user32.dll")]
+        internal static extern int GetSystemMetrics(int nIndex);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
