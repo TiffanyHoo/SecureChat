@@ -30,6 +30,7 @@ public sealed class SecureConnection : IAsyncDisposable
     public event Action<string, string, DateTimeOffset>? MessageReceived; // (发送者, 明文, 时间)
     public event Action<uint, string>? KeyRotated;                    // (纪元, 指纹)
     public event Action<string>? Disconnected;                        // 原因
+    public event Action<string>? OverReceived;                        // OVER 协商类型: request/accept/reject/cancel
 
     public ConnState State { get; private set; } = ConnState.Idle;
     public uint Epoch => _keys?.Epoch ?? 0;
@@ -249,6 +250,9 @@ public sealed class SecureConnection : IAsyncDisposable
                 case FrameType.Ping:
                     DecryptIncoming(frame); // 保活帧同样要解密并推进防重放计数器
                     break;
+                case FrameType.Over:
+                    HandleOver(frame);
+                    break;
                 case FrameType.Bye:
                     throw new IOException("对端已结束会话");
                 default:
@@ -272,6 +276,23 @@ public sealed class SecureConnection : IAsyncDisposable
                       ?? throw new IOException("Profile 载荷格式错误");
         _peerName = profile.Name;
         PeerNameReceived?.Invoke(profile.Name);
+    }
+
+    /// <summary>发送 OVER 协商帧。kind: request(请求结束) / accept(同意) / reject(拒绝) / cancel(撤回)。</summary>
+    public async Task SendOverAsync(string kind, CancellationToken ct = default)
+    {
+        if (State != ConnState.Established)
+            throw new InvalidOperationException("连接未建立");
+        await SendEncryptedAsync(FrameType.Over,
+            Payloads.Serialize(new Payloads.OverMessage(kind)), ct).ConfigureAwait(false);
+    }
+
+    private void HandleOver(Frame frame)
+    {
+        byte[] pt = DecryptIncoming(frame);
+        var msg = Payloads.Deserialize<Payloads.OverMessage>(pt)
+                  ?? throw new IOException("Over 载荷格式错误");
+        OverReceived?.Invoke(msg.Kind);
     }
 
     /// <summary>按纪元取密钥解密 + 防重放(计数器严格递增)。</summary>

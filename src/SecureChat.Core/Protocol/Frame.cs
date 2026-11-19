@@ -11,6 +11,7 @@ public enum FrameType : byte
     Ping = 6,      // 保活
     Bye = 7,       // 对端主动结束
     RekeyRequest = 8, // 请求对端( driver )发起轮换(仅由较高一方发送)
+    Over = 9,        // OVER 挂断协商(request/accept/reject/cancel)
 }
 
 /// <summary>线路帧:头部之后的载荷。</summary>

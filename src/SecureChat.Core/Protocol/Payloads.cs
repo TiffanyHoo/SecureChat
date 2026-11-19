@@ -9,6 +9,8 @@ public static class Payloads
 
     public sealed record ChatMessage(string Content);
     public sealed record ProfileMessage(string Name);
+    /// <summary>OVER 挂断协商:请求 / 同意 / 拒绝 / 撤回。</summary>
+    public sealed record OverMessage(string Kind);
 
     public static byte[] Serialize<T>(T value) =>
         JsonSerializer.SerializeToUtf8Bytes(value, Options);

@@ -217,4 +217,72 @@ public class EndToEndTests
         await gone.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(ConnState.Closed, server.State);
     }
+
+    [Fact]
+    public async Task Over请求_接受_协商帧双向可达()
+    {
+        var (server, client, _) = await TestPair.CreateAsync();
+        await using var _1 = server; await using var _2 = client;
+
+        var clientGot = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var serverGot = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.OverReceived += kind => clientGot.TrySetResult(kind);
+        server.OverReceived += kind => serverGot.TrySetResult(kind);
+
+        // 客户端请求 → 服务端收到 request
+        await client.SendOverAsync("request");
+        Assert.Equal("request", await serverGot.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        // 服务端同意 → 客户端收到 accept
+        await server.SendOverAsync("accept");
+        Assert.Equal("accept", await clientGot.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        // 协商后连接仍然存活,普通消息继续可达
+        var recv = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.MessageReceived += (_, content, _) => recv.TrySetResult(content);
+        await client.SendAsync("协商后仍在线");
+        Assert.Equal("协商后仍在线", await recv.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task Over拒绝与撤回_对端事件类型正确()
+    {
+        var (server, client, _) = await TestPair.CreateAsync();
+        await using var _1 = server; await using var _2 = client;
+
+        // 每次发送用独立 TCS:同一 TCS 第二次 SetResult 会被忽略
+        var rejectGot = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelGot = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.OverReceived += kind =>
+        {
+            if (kind == "reject") rejectGot.TrySetResult(kind);
+            if (kind == "cancel") cancelGot.TrySetResult(kind);
+        };
+
+        await client.SendOverAsync("reject");
+        Assert.Equal("reject", await rejectGot.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        await client.SendOverAsync("cancel");
+        Assert.Equal("cancel", await cancelGot.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task Over双方同时请求_双方均收到request_连接不中断()
+    {
+        var (server, client, _) = await TestPair.CreateAsync();
+        await using var _1 = server; await using var _2 = client;
+
+        var sGot = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cGot = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.OverReceived += kind => sGot.TrySetResult(kind);
+        client.OverReceived += kind => cGot.TrySetResult(kind);
+
+        // 默契场景:双方同时发出请求(UI 层收到对方 request 时自动 accept 结束)
+        await Task.WhenAll(server.SendOverAsync("request"), client.SendOverAsync("request"));
+
+        Assert.Equal("request", await sGot.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal("request", await cGot.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(ConnState.Established, server.State);
+        Assert.Equal(ConnState.Established, client.State);
+    }
 }
