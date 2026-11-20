@@ -125,10 +125,9 @@ fn convert(event: ConnectionEvent) -> (&'static str, Value) {
             }),
         ),
         ConnectionEvent::Over { kind } => ("over", json!({ "kind": kind })),
-        ConnectionEvent::Reaction { uid, reaction } => (
-            "reaction",
-            json!({ "uid": uid, "reaction": reaction }),
-        ),
+        ConnectionEvent::Reaction { uid, reaction } => {
+            ("reaction", json!({ "uid": uid, "reaction": reaction }))
+        }
         ConnectionEvent::Disconnected { reason } => ("disconnected", json!({ "reason": reason })),
     }
 }

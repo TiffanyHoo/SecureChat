@@ -105,9 +105,7 @@ async fn next_message(
     .expect("message timeout")
 }
 
-async fn next_reaction(
-    events: &mut mpsc::UnboundedReceiver<ConnectionEvent>,
-) -> (String, String) {
+async fn next_reaction(events: &mut mpsc::UnboundedReceiver<ConnectionEvent>) -> (String, String) {
     timeout(Duration::from_secs(5), async {
         loop {
             if let ConnectionEvent::Reaction { uid, reaction } =
@@ -199,7 +197,10 @@ async fn manual_rekey_rotates_epoch_and_fingerprint_and_preserves_messages() {
     assert_eq!(pair.server.epoch(), 1);
     assert_eq!(pair.client.fingerprint(), pair.server.fingerprint());
     assert_ne!(pair.client.fingerprint(), old_fingerprint);
-    pair.client.send_message("uid-3", "换钥后仍然可达").await.unwrap();
+    pair.client
+        .send_message("uid-3", "换钥后仍然可达")
+        .await
+        .unwrap();
     let (_, content, epoch) = next_message(&mut pair.server_events).await;
     assert_eq!(content, "换钥后仍然可达");
     assert_eq!(epoch, 1);
@@ -217,7 +218,10 @@ async fn simultaneous_rekey_converges_with_tiebreak_driver() {
     assert_eq!(pair.client.epoch(), pair.server.epoch());
     assert_eq!(pair.client.epoch(), 1);
     assert_eq!(pair.client.fingerprint(), pair.server.fingerprint());
-    pair.client.send_message("uid-4", "碰撞后消息正常").await.unwrap();
+    pair.client
+        .send_message("uid-4", "碰撞后消息正常")
+        .await
+        .unwrap();
     assert_eq!(
         next_message(&mut pair.server_events).await.1,
         "碰撞后消息正常"
@@ -260,7 +264,10 @@ async fn over_request_accept_reject_and_cancel_are_json_payloads() {
     }
     pair.server.send_over("accept").await.unwrap();
     assert_eq!(next_over(&mut pair.client_events).await, "accept");
-    pair.client.send_message("uid-7", "协商后仍在线").await.unwrap();
+    pair.client
+        .send_message("uid-7", "协商后仍在线")
+        .await
+        .unwrap();
     assert_eq!(
         next_message(&mut pair.server_events).await.1,
         "协商后仍在线"
@@ -279,10 +286,7 @@ async fn reaction_targets_peer_message_uid() {
         .unwrap();
     let (_, content, _) = next_message(&mut pair.server_events).await;
     assert_eq!(content, "需要回应的消息");
-    pair.server
-        .send_reaction("msg-42", "like")
-        .await
-        .unwrap();
+    pair.server.send_reaction("msg-42", "like").await.unwrap();
     assert_eq!(
         next_reaction(&mut pair.client_events).await,
         ("msg-42".into(), "like".into())

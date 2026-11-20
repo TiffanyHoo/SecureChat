@@ -286,7 +286,11 @@ impl SecureConnection {
         self.local_port
     }
 
-    pub async fn send_message(&self, uid: impl Into<String>, content: impl Into<String>) -> Result<()> {
+    pub async fn send_message(
+        &self,
+        uid: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Result<()> {
         let (response, result) = oneshot::channel();
         self.commands
             .send(Command::SendMessage {
@@ -311,7 +315,11 @@ impl SecureConnection {
         result.await.map_err(|_| Error::Closed)?
     }
 
-    pub async fn send_reaction(&self, uid: impl Into<String>, reaction: impl Into<String>) -> Result<()> {
+    pub async fn send_reaction(
+        &self,
+        uid: impl Into<String>,
+        reaction: impl Into<String>,
+    ) -> Result<()> {
         let (response, result) = oneshot::channel();
         self.commands
             .send(Command::SendReaction {
@@ -701,7 +709,11 @@ impl Actor {
 
     async fn handle_command(&mut self, command: Option<Command>) -> Result<Option<SessionEnd>> {
         match command {
-            Some(Command::SendMessage { uid, content, response }) => {
+            Some(Command::SendMessage {
+                uid,
+                content,
+                response,
+            }) => {
                 let payload = serde_json::to_vec(&ChatMessage { uid, content })
                     .map_err(|error| Error::Protocol(error.to_string()))?;
                 let result = self.send_encrypted(FrameType::Data, &payload).await;
@@ -723,7 +735,11 @@ impl Actor {
                 }
                 let _ = response.send(Ok(()));
             }
-            Some(Command::SendReaction { uid, reaction, response }) => {
+            Some(Command::SendReaction {
+                uid,
+                reaction,
+                response,
+            }) => {
                 let payload = serde_json::to_vec(&ReactionMessage { uid, reaction })
                     .map_err(|error| Error::Protocol(error.to_string()))?;
                 let result = self.send_encrypted(FrameType::Reaction, &payload).await;
