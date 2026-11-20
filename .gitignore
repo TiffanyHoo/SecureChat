@@ -2,11 +2,16 @@
 bin/
 obj/
 publish/
+dist/
+target/
+node_modules/
+src-tauri/gen/
 
 # IDE
 .vs/
 .vscode/
 .idea/
+.trae/
 *.user
 *.suo
 

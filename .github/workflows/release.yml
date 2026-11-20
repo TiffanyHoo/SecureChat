@@ -8,36 +8,99 @@ on:
 permissions:
   contents: write
 
-jobs:
-  build:
-    runs-on: windows-latest
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
+  check:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Install Linux dependencies (for Rust build scripts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          dotnet-version: 8.0.x
+          version: 11.25.0
+          run_install: false
 
-      - name: Restore
-        run: dotnet restore SecureChat.sln
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
 
-      - name: Build
-        run: dotnet build SecureChat.sln -c Release --no-restore
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      - name: Test
-        run: dotnet test tests/SecureChat.Core.Tests/SecureChat.Core.Tests.csproj -c Release --no-build
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
 
-      - name: Publish (win-x64, self-contained, single file)
-        run: dotnet publish src/SecureChat.App/SecureChat.App.csproj -c Release -r win-x64 --self-contained true -o publish
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test Rust workspace
+        run: cargo test --workspace
+
+      - name: Test frontend
+        run: pnpm test
+
+      - name: Build frontend
+        run: pnpm build
+
+  build:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Build Tauri (win-x64, no bundle)
+        run: pnpm tauri build --no-bundle
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: SecureChat-win-x64
-          path: publish/SecureChat.exe
+          path: target/release/securechat.exe
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -46,7 +109,7 @@ jobs:
         shell: pwsh
         run: |
           $tag = "v1.0.${{ github.run_number }}"
-          gh release create $tag publish/SecureChat.exe `
+          gh release create $tag target/release/securechat.exe `
             --target "${{ github.sha }}" `
             --title "SecureChat $tag" `
-            --notes "自动构建：合入 main 分支出包（commit ${{ github.sha }}）"
+            --notes "Tauri Windows 便携版（需要系统 WebView2 Runtime），commit ${{ github.sha }}"

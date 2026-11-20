@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SecureChat",
+  "version": "1.0.0",
+  "identifier": "com.securechat.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "SecureChat 安全通话",
+        "width": 760,
+        "height": 760,
+        "minWidth": 500,
+        "minHeight": 640,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost",
+        "img-src": "'self' asset: http://asset.localhost data:"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/app-icon-32.png",
+      "icons/app-icon-128.png",
+      "icons/app-icon-256.png",
+      "icons/app-icon-512.png",
+      "icons/app.ico"
+    ]
+  }
+}

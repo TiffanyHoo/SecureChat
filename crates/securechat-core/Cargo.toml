@@ -1,0 +1,28 @@
+[package]
+name = "securechat-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SecureChat v1 wire protocol and encrypted connection core"
+
+[lib]
+name = "securechat_core"
+path = "src/lib.rs"
+
+[dependencies]
+aes-gcm = "0.10"
+base64 = "0.22"
+hkdf = "0.12"
+hmac = "0.12"
+if-addrs = "0.13"
+p256 = { version = "0.13", features = ["ecdh", "pkcs8"] }
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "sync", "time"] }
+zeroize = { version = "1", features = ["zeroize_derive"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
