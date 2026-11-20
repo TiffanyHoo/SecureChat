@@ -15,9 +15,27 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_release: ${{ steps.version.outputs.should_release }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect version and check release status
+        id: version
+        run: |
+          VERSION=$(jq -r .version src-tauri/tauri.conf.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "v$VERSION already released, skip build"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "v$VERSION not released yet, will build"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install Linux dependencies (for Rust build scripts)
         run: |
@@ -64,7 +82,10 @@ jobs:
 
   build:
     needs: check
+    if: needs.check.outputs.should_release == 'true'
     runs-on: windows-latest
+    env:
+      SCHAT_VERSION: ${{ needs.check.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,11 +117,15 @@ jobs:
       - name: Build Tauri (win-x64, no bundle)
         run: pnpm tauri build --no-bundle
 
+      - name: Rename artifact with version
+        shell: pwsh
+        run: Copy-Item target/release/securechat.exe "target/release/SChat-$env:SCHAT_VERSION.exe"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SecureChat-win-x64
-          path: target/release/securechat.exe
+          name: SChat-${{ env.SCHAT_VERSION }}-win-x64
+          path: target/release/SChat-*.exe
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -108,8 +133,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $tag = "v1.0.${{ github.run_number }}"
-          gh release create $tag target/release/securechat.exe `
+          $tag = "v${{ env.SCHAT_VERSION }}"
+          gh release create $tag "target/release/SChat-${{ env.SCHAT_VERSION }}.exe" `
             --target "${{ github.sha }}" `
             --title "SecureChat $tag" `
             --notes "Tauri Windows 便携版（需要系统 WebView2 Runtime），commit ${{ github.sha }}"
