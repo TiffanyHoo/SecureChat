@@ -19,8 +19,10 @@ export const getSnapshot = () => invoke<SessionSnapshot>('get_snapshot');
 
 export const disconnect = (sessionId: number, reason = '本地主动断开') =>
   invoke<void>('disconnect', { sessionId, reason });
-export const sendMessage = (sessionId: number, content: string) =>
-  invoke<void>('send_message', { sessionId, content });
+export const sendMessage = (sessionId: number, uid: string, content: string) =>
+  invoke<void>('send_message', { sessionId, uid, content });
+export const sendReaction = (sessionId: number, uid: string, reaction: string) =>
+  invoke<void>('send_reaction', { sessionId, uid, reaction });
 export const rekeyNow = (sessionId: number) =>
   invoke<void>('rekey_now', { sessionId });
 export const sendOver = (sessionId: number, kind: OverKind) =>

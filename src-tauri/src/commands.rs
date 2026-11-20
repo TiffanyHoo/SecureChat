@@ -245,12 +245,34 @@ pub async fn disconnect(
 pub async fn send_message(
     state: State<'_, AppState>,
     session_id: u64,
+    uid: String,
     content: String,
 ) -> Result<(), String> {
     let session = state.get(session_id)?;
     session
         .connection
-        .send_message(content)
+        .send_message(uid, content)
+        .await
+        .map_err(to_message)
+}
+
+#[tauri::command]
+pub async fn send_reaction(
+    state: State<'_, AppState>,
+    session_id: u64,
+    uid: String,
+    reaction: String,
+) -> Result<(), String> {
+    if !matches!(reaction.as_str(), "like" | "heart" | "copythat") {
+        return Err("无效的表情回应".into());
+    }
+    if uid.trim().is_empty() {
+        return Err("无效的消息标识".into());
+    }
+    let session = state.get(session_id)?;
+    session
+        .connection
+        .send_reaction(uid, reaction)
         .await
         .map_err(to_message)
 }

@@ -1,0 +1,175 @@
+/* 设计系统令牌与基础层（src/ui/）。视觉重构期间与旧样式共存，重构完成后此文件为唯一样式来源。 */
+
+/* 运行时颜色变量：深色模式跟随系统 */
+:root {
+  --sc-bg: #edf1f7;
+  --sc-surface: #ffffff;
+  --sc-surface-muted: #f5f7fa;
+  --sc-ink: #17202e;
+  --sc-ink-muted: #5d6b7c;
+  --sc-line: #d9dfe8;
+  --sc-line-strong: #94a1b2;
+  --sc-accent: #3d6df5;
+  --sc-accent-strong: #2c55d8;
+  --sc-accent-soft: #e6edfe;
+  --sc-over: #e14b33;
+  --sc-over-strong: #c33d27;
+  --sc-focus: #3d6df5;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sc-bg: #10151d;
+    --sc-surface: #1a2130;
+    --sc-surface-muted: #151b26;
+    --sc-ink: #e8edf4;
+    --sc-ink-muted: #98a4b5;
+    --sc-line: #2b3446;
+    --sc-line-strong: #465570;
+    --sc-accent: #5b8cff;
+    --sc-accent-strong: #76a1ff;
+    --sc-accent-soft: #223154;
+    --sc-over: #f06549;
+    --sc-over-strong: #ff8168;
+    --sc-focus: #76a1ff;
+    color-scheme: dark;
+  }
+}
+
+/* Tailwind 主题令牌映射（inline：直接引用上面的运行时变量） */
+@theme inline {
+  --font-sans: 'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
+  --font-mono: Consolas, 'Cascadia Mono', monospace;
+
+  --color-bg: var(--sc-bg);
+  --color-surface: var(--sc-surface);
+  --color-surface-muted: var(--sc-surface-muted);
+  --color-ink: var(--sc-ink);
+  --color-ink-muted: var(--sc-ink-muted);
+  --color-line: var(--sc-line);
+  --color-line-strong: var(--sc-line-strong);
+  --color-accent: var(--sc-accent);
+  --color-accent-strong: var(--sc-accent-strong);
+  --color-accent-soft: var(--sc-accent-soft);
+  --color-over: var(--sc-over);
+  --color-over-strong: var(--sc-over-strong);
+  --color-focus: var(--sc-focus);
+
+  --animate-bubble-in: bubble-in 240ms ease-out both;
+  --animate-card-in: card-in 240ms ease-out both;
+  --animate-radio-stamp: radio-stamp 1.4s ease-out both;
+  --animate-over-pulse: over-pulse 1.4s ease-in-out infinite;
+}
+
+/* 动画关键帧：全局声明，供 Tailwind animate-* 工具类与旧样式共用 */
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes radio-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(2.2) rotate(-8deg);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1) rotate(-3deg);
+  }
+  26% {
+    transform: scale(1.06) rotate(-2deg);
+  }
+  34% {
+    transform: scale(1) rotate(-3deg);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1) rotate(-3deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1) rotate(-3deg);
+  }
+}
+
+@keyframes over-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  body {
+    min-width: 320px;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    color: var(--sc-ink);
+    background: var(--sc-bg);
+  }
+
+  button,
+  input,
+  select,
+  a {
+    min-block-size: 2rem;
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  input,
+  select {
+    min-block-size: 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  a:focus-visible {
+    outline: 2px solid Highlight;
+  }
+}

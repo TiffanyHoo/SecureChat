@@ -105,6 +105,22 @@ async fn next_message(
     .expect("message timeout")
 }
 
+async fn next_reaction(
+    events: &mut mpsc::UnboundedReceiver<ConnectionEvent>,
+) -> (String, String) {
+    timeout(Duration::from_secs(5), async {
+        loop {
+            if let ConnectionEvent::Reaction { uid, reaction } =
+                events.recv().await.expect("event channel closed")
+            {
+                return (uid, reaction);
+            }
+        }
+    })
+    .await
+    .expect("reaction timeout")
+}
+
 async fn next_over(events: &mut mpsc::UnboundedReceiver<ConnectionEvent>) -> String {
     timeout(Duration::from_secs(5), async {
         loop {
@@ -137,14 +153,14 @@ async fn next_disconnect(events: &mut mpsc::UnboundedReceiver<ConnectionEvent>) 
 async fn loopback_messages_and_peer_names_flow_in_both_directions() {
     let mut pair = establish_pair().await;
     pair.client
-        .send_message("你好,这是密文通道里的明文")
+        .send_message("uid-1", "你好,这是密文通道里的明文")
         .await
         .unwrap();
     let (from, content, epoch) = next_message(&mut pair.server_events).await;
     assert_eq!(from, "连接方");
     assert_eq!(content, "你好,这是密文通道里的明文");
     assert_eq!(epoch, 0);
-    pair.server.send_message("reversed").await.unwrap();
+    pair.server.send_message("uid-2", "reversed").await.unwrap();
     assert_eq!(next_message(&mut pair.client_events).await.1, "reversed");
     timeout(Duration::from_secs(5), async {
         while pair.server.peer_name().as_deref() != Some("连接方")
@@ -169,7 +185,7 @@ async fn mismatched_psk_disconnects_without_establishing() {
     assert_eq!(pair.server.state(), ConnState::Closed);
     assert_eq!(pair.client.state(), ConnState::Closed);
     assert!(matches!(
-        pair.client.send_message("no").await,
+        pair.client.send_message("uid-no", "no").await,
         Err(Error::Closed)
     ));
 }
@@ -183,7 +199,7 @@ async fn manual_rekey_rotates_epoch_and_fingerprint_and_preserves_messages() {
     assert_eq!(pair.server.epoch(), 1);
     assert_eq!(pair.client.fingerprint(), pair.server.fingerprint());
     assert_ne!(pair.client.fingerprint(), old_fingerprint);
-    pair.client.send_message("换钥后仍然可达").await.unwrap();
+    pair.client.send_message("uid-3", "换钥后仍然可达").await.unwrap();
     let (_, content, epoch) = next_message(&mut pair.server_events).await;
     assert_eq!(content, "换钥后仍然可达");
     assert_eq!(epoch, 1);
@@ -201,7 +217,7 @@ async fn simultaneous_rekey_converges_with_tiebreak_driver() {
     assert_eq!(pair.client.epoch(), pair.server.epoch());
     assert_eq!(pair.client.epoch(), 1);
     assert_eq!(pair.client.fingerprint(), pair.server.fingerprint());
-    pair.client.send_message("碰撞后消息正常").await.unwrap();
+    pair.client.send_message("uid-4", "碰撞后消息正常").await.unwrap();
     assert_eq!(
         next_message(&mut pair.server_events).await.1,
         "碰撞后消息正常"
@@ -215,7 +231,7 @@ async fn messages_can_be_sent_while_rekey_is_in_progress() {
     let mut pair = establish_pair().await;
     let (rekey_result, send_result) = tokio::join!(
         pair.client.rekey_now(),
-        pair.client.send_message("during rekey")
+        pair.client.send_message("uid-5", "during rekey")
     );
     rekey_result.unwrap();
     send_result.unwrap();
@@ -224,7 +240,7 @@ async fn messages_can_be_sent_while_rekey_is_in_progress() {
         "during rekey"
     );
     pair.server
-        .send_message("reverse after rekey")
+        .send_message("uid-6", "reverse after rekey")
         .await
         .unwrap();
     assert_eq!(
@@ -244,12 +260,41 @@ async fn over_request_accept_reject_and_cancel_are_json_payloads() {
     }
     pair.server.send_over("accept").await.unwrap();
     assert_eq!(next_over(&mut pair.client_events).await, "accept");
-    pair.client.send_message("协商后仍在线").await.unwrap();
+    pair.client.send_message("uid-7", "协商后仍在线").await.unwrap();
     assert_eq!(
         next_message(&mut pair.server_events).await.1,
         "协商后仍在线"
     );
     assert_eq!(pair.client.state(), ConnState::Established);
+    pair.client.disconnect().await.unwrap();
+    pair.server.disconnect().await.unwrap();
+}
+
+#[tokio::test]
+async fn reaction_targets_peer_message_uid() {
+    let mut pair = establish_pair().await;
+    pair.client
+        .send_message("msg-42", "需要回应的消息")
+        .await
+        .unwrap();
+    let (_, content, _) = next_message(&mut pair.server_events).await;
+    assert_eq!(content, "需要回应的消息");
+    pair.server
+        .send_reaction("msg-42", "like")
+        .await
+        .unwrap();
+    assert_eq!(
+        next_reaction(&mut pair.client_events).await,
+        ("msg-42".into(), "like".into())
+    );
+    pair.client
+        .send_reaction("msg-42", "copythat")
+        .await
+        .unwrap();
+    assert_eq!(
+        next_reaction(&mut pair.server_events).await,
+        ("msg-42".into(), "copythat".into())
+    );
     pair.client.disconnect().await.unwrap();
     pair.server.disconnect().await.unwrap();
 }
@@ -307,7 +352,7 @@ async fn repeated_rekeys_form_a_chain_and_keep_both_directions_usable() {
         if target_epoch % 2 == 1 {
             pair.client.rekey_now().await.unwrap();
             pair.client
-                .send_message(format!("epoch {target_epoch}"))
+                .send_message("uid-c", format!("epoch {target_epoch}"))
                 .await
                 .unwrap();
             assert_eq!(
@@ -317,7 +362,7 @@ async fn repeated_rekeys_form_a_chain_and_keep_both_directions_usable() {
         } else {
             pair.server.rekey_now().await.unwrap();
             pair.server
-                .send_message(format!("epoch {target_epoch}"))
+                .send_message("uid-s", format!("epoch {target_epoch}"))
                 .await
                 .unwrap();
             assert_eq!(

@@ -1,11 +1,12 @@
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   clearScreen: false,
   server: {
-    port: 1420,
+    port: 1428,
     strictPort: true,
     watch: {
       ignored: ['**/target/**', '**/src-tauri/gen/**'],

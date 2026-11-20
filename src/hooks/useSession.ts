@@ -13,6 +13,11 @@ import type { CreateRoomParams, JoinRoomParams, SessionEvent } from '../types';
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+const newMessageUid = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `uid-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 export function useSession() {
   const [state, reactDispatch] = useReducer(sessionReducer, initialSessionState);
   const stateRef = useRef<SessionState>(state);
@@ -143,13 +148,29 @@ export function useSession() {
       const current = stateRef.current;
       const text = content.trim();
       if (current.sessionId === null || !isConnected(current) || !text) return false;
-      dispatch({ type: 'local-message', sender, content: text });
+      const uid = newMessageUid();
+      dispatch({ type: 'local-message', sender, content: text, uid });
       try {
-        await api.sendMessage(current.sessionId, text);
+        await api.sendMessage(current.sessionId, uid, text);
         return true;
       } catch (error) {
         dispatch({ type: 'command-error', message: `发送失败：${errorMessage(error)}` });
         return false;
+      }
+    },
+    [dispatch],
+  );
+
+  const sendReaction = useCallback(
+    async (uid: string, reaction: string) => {
+      const current = stateRef.current;
+      if (current.sessionId === null || !isConnected(current)) return;
+      dispatch({ type: 'toggle-reaction', uid, reaction });
+      try {
+        await api.sendReaction(current.sessionId, uid, reaction);
+      } catch (error) {
+        dispatch({ type: 'toggle-reaction', uid, reaction });
+        dispatch({ type: 'command-error', message: `回应发送失败：${errorMessage(error)}` });
       }
     },
     [dispatch],
@@ -219,6 +240,7 @@ export function useSession() {
     joinRoom,
     disconnect,
     sendMessage,
+    sendReaction,
     rekeyNow,
     requestOver,
     cancelOver,

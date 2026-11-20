@@ -67,7 +67,7 @@ fn invalid_frames_are_rejected() {
         bytes[4] = FrameType::Data as u8;
         assert!(matches!(decode_frame(&bytes), Err(Error::InvalidFrame(_))));
     }
-    for frame_type in [0_u8, 10, 255] {
+    for frame_type in [0_u8, 11, 255] {
         let mut bytes = vec![0_u8; HEADER_SIZE];
         bytes[..4].copy_from_slice(&(HEADER_SIZE as u32).to_be_bytes());
         bytes[4] = frame_type;
@@ -88,6 +88,7 @@ async fn truncated_network_frame_is_eof() {
 #[test]
 fn json_payloads_match_dotnet_camel_case() {
     let chat = serde_json::to_vec(&ChatMessage {
+        uid: "uid-1".into(),
         content: "你好🦀".into(),
     })
     .unwrap();

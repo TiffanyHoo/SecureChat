@@ -38,6 +38,7 @@ export interface StatePayload {
 }
 
 export interface MessagePayload {
+  uid: string;
   sender: string;
   content: string;
   sentAtUnixMs: number;
@@ -72,5 +73,6 @@ export type SessionEvent = EventEnvelope &
     | { kind: 'peer-name'; payload: { name: string } }
     | { kind: 'key-rotated'; payload: KeyPayload }
     | { kind: 'over'; payload: { kind: OverKind } }
+    | { kind: 'reaction'; payload: { uid: string; reaction: string } }
     | { kind: 'disconnected'; payload: { reason: string } }
   );

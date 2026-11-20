@@ -5,7 +5,7 @@
   "identifier": "com.securechat.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:1428",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
@@ -30,8 +30,7 @@
     }
   },
   "bundle": {
-    "active": true,
-    "targets": "all",
+    "active": false,
     "icon": [
       "icons/app-icon-32.png",
       "icons/app-icon-128.png",

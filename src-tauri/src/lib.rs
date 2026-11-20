@@ -15,6 +15,7 @@ pub fn run() {
             commands::get_snapshot,
             commands::disconnect,
             commands::send_message,
+            commands::send_reaction,
             commands::rekey_now,
             commands::send_over,
         ])

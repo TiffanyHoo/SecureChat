@@ -3,12 +3,23 @@ import type { ConnectionState, SessionEvent, SessionSnapshot } from './types';
 export type OverPhase = 'idle' | 'waiting' | 'peer-asking';
 export type MessageKind = 'mine' | 'theirs' | 'system' | 'over-card';
 
+export type ReactionKey = 'like' | 'heart' | 'copythat';
+
+export const REACTION_KEYS: ReactionKey[] = ['like', 'heart', 'copythat'];
+
+export interface MessageReaction {
+  reaction: string;
+  self: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   kind: MessageKind;
   sender?: string;
   content: string;
   sentAtUnixMs?: number;
+  uid?: string;
+  reactions?: MessageReaction[];
 }
 
 export interface SessionState {
@@ -55,7 +66,7 @@ export type SessionAction =
     }
   | { type: 'event'; event: SessionEvent }
   | { type: 'snapshot'; snapshot: SessionSnapshot }
-  | { type: 'local-message'; sender: string; content: string }
+  | { type: 'local-message'; sender: string; content: string; uid: string }
   | { type: 'command-error'; message: string; status?: string }
   | { type: 'over-requested' }
   | { type: 'over-cancelled' }
@@ -65,7 +76,22 @@ export type SessionAction =
   | { type: 'over-complete' }
   | { type: 'rekeying'; value: boolean }
   | { type: 'copied'; ok: boolean }
+  | { type: 'toggle-reaction'; uid: string; reaction: string }
   | { type: 'local-disconnected' };
+
+const toggleReaction = (messages: ChatMessage[], uid: string, reaction: string, self: boolean) =>
+  messages.map((message) => {
+    if (message.uid !== uid) return message;
+    const reactions = message.reactions ?? [];
+    const index = reactions.findIndex((entry) => entry.reaction === reaction && entry.self === self);
+    return {
+      ...message,
+      reactions:
+        index >= 0
+          ? reactions.filter((_, at) => at !== index)
+          : [...reactions, { reaction, self }],
+    };
+  });
 
 const withSystem = (state: SessionState, content: string): SessionState => {
   const localSeq = state.localSeq + 1;
@@ -134,8 +160,14 @@ const applyEvent = (state: SessionState, event: SessionEvent): SessionState => {
             sender: event.payload.sender,
             content: event.payload.content,
             sentAtUnixMs: event.payload.sentAtUnixMs,
+            uid: event.payload.uid,
           },
         ],
+      };
+    case 'reaction':
+      return {
+        ...current,
+        messages: toggleReaction(current.messages, event.payload.uid, event.payload.reaction, false),
       };
     case 'peer-name':
       return { ...current, peerName: event.payload.name };
@@ -229,10 +261,16 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
             sender: action.sender,
             content: action.content,
             sentAtUnixMs: Date.now(),
+            uid: action.uid,
           },
         ],
       };
     }
+    case 'toggle-reaction':
+      return {
+        ...state,
+        messages: toggleReaction(state.messages, action.uid, action.reaction, true),
+      };
     case 'command-error':
       return withSystem({ ...state, ...(action.status ? { status: action.status } : {}) }, action.message);
     case 'over-requested':

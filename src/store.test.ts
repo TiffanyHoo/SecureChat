@@ -25,7 +25,7 @@ describe('sessionReducer', () => {
       sessionId: 6,
       seq: 1,
       kind: 'message',
-      payload: { sender: '旧连接', content: '不应出现', sentAtUnixMs: 1 },
+      payload: { uid: 'u0', sender: '旧连接', content: '不应出现', sentAtUnixMs: 1 },
     } as const;
     expect(sessionReducer(state, { type: 'event', event: oldSession })).toBe(state);
 
@@ -61,6 +61,40 @@ describe('sessionReducer', () => {
       snapshot: { sessionId: 7, seq: 1, peerName: '', ...payload },
     });
     expect(snapshot.messages).toHaveLength(2);
+  });
+
+  it('表情回应按 uid 归属并支持双方切换', () => {
+    const state = started();
+    const received = sessionReducer(state, {
+      type: 'event',
+      event: event(1, 'message', {
+        uid: 'u1',
+        sender: '对方',
+        content: '你好',
+        sentAtUnixMs: 1,
+      } as never),
+    });
+    expect(received.messages.at(-1)?.uid).toBe('u1');
+
+    const liked = sessionReducer(received, {
+      type: 'toggle-reaction',
+      uid: 'u1',
+      reaction: 'like',
+    });
+    expect(liked.messages.at(-1)?.reactions).toEqual([{ reaction: 'like', self: true }]);
+
+    const unliked = sessionReducer(liked, {
+      type: 'toggle-reaction',
+      uid: 'u1',
+      reaction: 'like',
+    });
+    expect(unliked.messages.at(-1)?.reactions).toEqual([]);
+
+    const peerLiked = sessionReducer(unliked, {
+      type: 'event',
+      event: event(2, 'reaction', { uid: 'u1', reaction: 'like' } as never),
+    });
+    expect(peerLiked.messages.at(-1)?.reactions).toEqual([{ reaction: 'like', self: false }]);
   });
 
   it('收到 OVER 请求时插入卡片，撤回时移除', () => {

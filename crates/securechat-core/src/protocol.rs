@@ -19,6 +19,7 @@ pub enum FrameType {
     Bye = 7,
     RekeyRequest = 8,
     Over = 9,
+    Reaction = 10,
 }
 
 impl TryFrom<u8> for FrameType {
@@ -35,6 +36,7 @@ impl TryFrom<u8> for FrameType {
             7 => Ok(Self::Bye),
             8 => Ok(Self::RekeyRequest),
             9 => Ok(Self::Over),
+            10 => Ok(Self::Reaction),
             _ => Err(Error::InvalidFrame(format!("unknown frame type {value}"))),
         }
     }
@@ -154,7 +156,16 @@ where
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatMessage {
+    #[serde(default)]
+    pub uid: String,
     pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReactionMessage {
+    pub uid: String,
+    pub reaction: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

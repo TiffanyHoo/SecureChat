@@ -21,6 +21,7 @@ use crate::crypto::{
 };
 use crate::protocol::{
     read_frame, write_frame, ChatMessage, Frame, FrameType, OverMessage, ProfileMessage,
+    ReactionMessage,
 };
 use crate::{Error, Result};
 
@@ -94,6 +95,7 @@ pub enum ConnectionEvent {
         next_rotation_unix_ms: i64,
     },
     Message {
+        uid: String,
         from: String,
         content: String,
         timestamp_unix_ms: i64,
@@ -109,6 +111,10 @@ pub enum ConnectionEvent {
     },
     Over {
         kind: String,
+    },
+    Reaction {
+        uid: String,
+        reaction: String,
     },
     Disconnected {
         reason: String,
@@ -143,11 +149,17 @@ type Response = oneshot::Sender<Result<()>>;
 
 enum Command {
     SendMessage {
+        uid: String,
         content: String,
         response: Response,
     },
     SendOver {
         kind: String,
+        response: Response,
+    },
+    SendReaction {
+        uid: String,
+        reaction: String,
         response: Response,
     },
     SetDisplayName {
@@ -274,10 +286,11 @@ impl SecureConnection {
         self.local_port
     }
 
-    pub async fn send_message(&self, content: impl Into<String>) -> Result<()> {
+    pub async fn send_message(&self, uid: impl Into<String>, content: impl Into<String>) -> Result<()> {
         let (response, result) = oneshot::channel();
         self.commands
             .send(Command::SendMessage {
+                uid: uid.into(),
                 content: content.into(),
                 response,
             })
@@ -291,6 +304,19 @@ impl SecureConnection {
         self.commands
             .send(Command::SendOver {
                 kind: kind.into(),
+                response,
+            })
+            .await
+            .map_err(|_| Error::Closed)?;
+        result.await.map_err(|_| Error::Closed)?
+    }
+
+    pub async fn send_reaction(&self, uid: impl Into<String>, reaction: impl Into<String>) -> Result<()> {
+        let (response, result) = oneshot::channel();
+        self.commands
+            .send(Command::SendReaction {
+                uid: uid.into(),
+                reaction: reaction.into(),
                 response,
             })
             .await
@@ -587,6 +613,7 @@ impl Actor {
             }
             Some(Command::SendMessage { response, .. })
             | Some(Command::SendOver { response, .. })
+            | Some(Command::SendReaction { response, .. })
             | Some(Command::SetDisplayName { response, .. })
             | Some(Command::Rekey { response }) => {
                 let _ = response.send(Err(Error::NotEstablished));
@@ -674,8 +701,8 @@ impl Actor {
 
     async fn handle_command(&mut self, command: Option<Command>) -> Result<Option<SessionEnd>> {
         match command {
-            Some(Command::SendMessage { content, response }) => {
-                let payload = serde_json::to_vec(&ChatMessage { content })
+            Some(Command::SendMessage { uid, content, response }) => {
+                let payload = serde_json::to_vec(&ChatMessage { uid, content })
                     .map_err(|error| Error::Protocol(error.to_string()))?;
                 let result = self.send_encrypted(FrameType::Data, &payload).await;
                 if let Err(error) = result {
@@ -689,6 +716,17 @@ impl Actor {
                 let payload = serde_json::to_vec(&OverMessage { kind })
                     .map_err(|error| Error::Protocol(error.to_string()))?;
                 let result = self.send_encrypted(FrameType::Over, &payload).await;
+                if let Err(error) = result {
+                    let reason = error.to_string();
+                    let _ = response.send(Err(error));
+                    return Err(Error::Protocol(reason));
+                }
+                let _ = response.send(Ok(()));
+            }
+            Some(Command::SendReaction { uid, reaction, response }) => {
+                let payload = serde_json::to_vec(&ReactionMessage { uid, reaction })
+                    .map_err(|error| Error::Protocol(error.to_string()))?;
+                let result = self.send_encrypted(FrameType::Reaction, &payload).await;
                 if let Err(error) = result {
                     let reason = error.to_string();
                     let _ = response.send(Err(error));
@@ -739,6 +777,7 @@ impl Actor {
                 let message: ChatMessage = serde_json::from_slice(&plaintext)
                     .map_err(|_| Error::Protocol("malformed chat message JSON".into()))?;
                 let _ = self.events.send(ConnectionEvent::Message {
+                    uid: message.uid,
                     from: self.peer_name.clone().unwrap_or_else(|| "对方".into()),
                     content: message.content,
                     timestamp_unix_ms: unix_time_ms(),
@@ -784,6 +823,15 @@ impl Actor {
                 let over: OverMessage = serde_json::from_slice(&plaintext)
                     .map_err(|_| Error::Protocol("malformed OVER JSON".into()))?;
                 let _ = self.events.send(ConnectionEvent::Over { kind: over.kind });
+            }
+            FrameType::Reaction => {
+                let plaintext = self.decrypt_incoming(&frame)?;
+                let reaction: ReactionMessage = serde_json::from_slice(&plaintext)
+                    .map_err(|_| Error::Protocol("malformed reaction JSON".into()))?;
+                let _ = self.events.send(ConnectionEvent::Reaction {
+                    uid: reaction.uid,
+                    reaction: reaction.reaction,
+                });
             }
             FrameType::Bye => return Ok(Some(SessionEnd::peer("peer ended the session"))),
             FrameType::Hello | FrameType::Confirm => {

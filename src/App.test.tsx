@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   joinRoom: vi.fn(),
   disconnect: vi.fn(),
   sendMessage: vi.fn(),
+  sendReaction: vi.fn(),
   rekeyNow: vi.fn(),
   sendOver: vi.fn(),
   eventHandler: undefined as ((event: SessionEvent) => void) | undefined,
@@ -22,6 +23,7 @@ vi.mock('./api', () => ({
   joinRoom: mocks.joinRoom,
   disconnect: mocks.disconnect,
   sendMessage: mocks.sendMessage,
+  sendReaction: mocks.sendReaction,
   rekeyNow: mocks.rekeyNow,
   sendOver: mocks.sendOver,
   onSessionEvent: mocks.onSessionEvent,
@@ -99,7 +101,9 @@ describe('App', () => {
     const input = screen.getByLabelText('消息内容');
     fireEvent.change(input, { target: { value: '加密消息' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
-    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledWith(1, '加密消息'));
+    await waitFor(() =>
+      expect(mocks.sendMessage).toHaveBeenCalledWith(1, expect.any(String), '加密消息'),
+    );
     expect(input).toHaveValue('');
     expect(screen.getByText('加密消息')).toBeInTheDocument();
   });

@@ -97,6 +97,7 @@ fn convert(event: ConnectionEvent) -> (&'static str, Value) {
             ),
         ),
         ConnectionEvent::Message {
+            uid,
             from,
             content,
             timestamp_unix_ms,
@@ -104,6 +105,7 @@ fn convert(event: ConnectionEvent) -> (&'static str, Value) {
         } => (
             "message",
             json!({
+                "uid": uid,
                 "sender": from,
                 "content": content,
                 "sentAtUnixMs": timestamp_unix_ms,
@@ -123,6 +125,10 @@ fn convert(event: ConnectionEvent) -> (&'static str, Value) {
             }),
         ),
         ConnectionEvent::Over { kind } => ("over", json!({ "kind": kind })),
+        ConnectionEvent::Reaction { uid, reaction } => (
+            "reaction",
+            json!({ "uid": uid, "reaction": reaction }),
+        ),
         ConnectionEvent::Disconnected { reason } => ("disconnected", json!({ "reason": reason })),
     }
 }
@@ -150,6 +156,7 @@ mod tests {
     #[test]
     fn message_event_does_not_change_shape_or_include_epoch() {
         let (kind, payload) = convert(ConnectionEvent::Message {
+            uid: "uid-1".into(),
             from: "peer".into(),
             content: "secret".into(),
             timestamp_unix_ms: 42,
@@ -158,7 +165,7 @@ mod tests {
         assert_eq!(kind, "message");
         assert_eq!(
             payload,
-            json!({"sender": "peer", "content": "secret", "sentAtUnixMs": 42})
+            json!({"uid": "uid-1", "sender": "peer", "content": "secret", "sentAtUnixMs": 42})
         );
     }
 
