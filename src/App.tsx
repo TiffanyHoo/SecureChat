@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { motion } from 'motion/react';
 import { ConnectionPanel, type ConnectionConfig } from './components/ConnectionPanel';
 import { MessageList } from './components/MessageList';
 import { NameSetup, loadDisplayName, saveDisplayName } from './components/NameSetup';
@@ -70,10 +70,14 @@ export default function App() {
     void sendMessage(config.displayName.trim(), content);
   };
 
+  // 记录闪烁复位定时器：连点时清理上一次，避免早先的定时器提前关闭闪烁
+  const copyFlashTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(copyFlashTimer.current), []);
   const handleCopyRoomCode = () => {
     void copyRoomCode();
     setCopiedFlash(true);
-    window.setTimeout(() => setCopiedFlash(false), 1600);
+    window.clearTimeout(copyFlashTimer.current);
+    copyFlashTimer.current = window.setTimeout(() => setCopiedFlash(false), 1600);
   };
 
   if (needsNameSetup) {
@@ -135,18 +139,26 @@ export default function App() {
         <div className="flex shrink-0 items-center gap-2">
           {session.generatedCode && (
             <button type="button" className={buttonSecondary} onClick={handleCopyRoomCode}>
-              <AnimatePresence initial={false}>
+              <span className="sr-only">复制房间码</span>
+              {/* grid 叠放两段文案，按钮宽度恒等于较宽者，交叉淡变时不产生布局跳动 */}
+              <span className="grid">
                 <motion.span
-                  key={copiedFlash ? 'copied' : 'copy'}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
+                  aria-hidden
+                  className="col-start-1 row-start-1 inline-block"
+                  animate={{ opacity: copiedFlash ? 1 : 0, y: copiedFlash ? 0 : 4 }}
                   transition={springPop}
-                  className="inline-block"
                 >
-                  {copiedFlash ? '已复制 ✓' : '复制房间码'}
+                  已复制 ✓
                 </motion.span>
-              </AnimatePresence>
+                <motion.span
+                  aria-hidden
+                  className="col-start-1 row-start-1 inline-block"
+                  animate={{ opacity: copiedFlash ? 0 : 1, y: copiedFlash ? -4 : 0 }}
+                  transition={springPop}
+                >
+                  复制房间码
+                </motion.span>
+              </span>
             </button>
           )}
           {connected && session.overPhase === 'idle' && !session.overEnding && (
