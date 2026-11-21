@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react';
+import { motion } from 'motion/react';
 import { buttonPrimary, inputBase } from '../ui/ui';
+import { springEnter } from '../ui/motion';
 
 export const DISPLAY_NAME_STORAGE_KEY = 'securechat:displayName';
 
@@ -41,8 +43,16 @@ export function NameSetup({ onSave }: NameSetupProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4 backdrop-blur">
-      <form
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4 backdrop-blur"
+    >
+      <motion.form
+        initial={{ opacity: 0, y: 16, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={springEnter}
         className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6 shadow-xl"
         onSubmit={submit}
         aria-labelledby="name-setup-title"
@@ -71,7 +81,7 @@ export function NameSetup({ onSave }: NameSetupProps) {
         <button type="submit" className={`${buttonPrimary} mt-4 w-full`} disabled={!name.trim()}>
           保存并继续
         </button>
-      </form>
-    </div>
+      </motion.form>
+    </motion.div>
   );
 }

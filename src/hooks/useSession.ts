@@ -95,7 +95,7 @@ export function useSession() {
           type: 'session-started',
           sessionId: result.sessionId,
           roomCode: result.roomCode,
-          status: `房间已创建，正在监听端口 ${params.port}，等待对方加入…`,
+          status: '房间已创建，正在等待对方加入…',
           systemMessage: '房间码已生成（含随机口令）。请通过你信任的渠道发给对方。',
         });
         dispatch({ type: 'snapshot', snapshot: await api.getSnapshot() });

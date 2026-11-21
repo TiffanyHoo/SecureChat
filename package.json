@@ -4,19 +4,24 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "prepare": "husky",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "tauri": "tauri"
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.20",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
     "@tauri-apps/plugin-notification": "^2.0.0",
+    "motion": "^14.14.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
     "@tailwindcss/vite": "^4.3.5",
     "@tauri-apps/cli": "^2.0.0",
     "@testing-library/jest-dom": "6.9.1",
@@ -24,6 +29,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "husky": "^9.1.7",
     "jsdom": "^27.0.0",
     "tailwindcss": "^4.3.5",
     "typescript": "~5.9.3",

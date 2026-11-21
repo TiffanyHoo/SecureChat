@@ -68,9 +68,6 @@ impl AppState {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateRoomParams {
-    host_ip: String,
-    port: u16,
-    rotation_minutes: u16,
     display_name: String,
 }
 
@@ -123,43 +120,45 @@ impl Default for SessionSnapshot {
 }
 
 #[tauri::command]
-pub fn list_host_ips() -> Vec<String> {
-    candidate_host_ips()
-}
-
-#[tauri::command]
 pub async fn create_room(
     app: AppHandle,
     state: State<'_, AppState>,
     params: CreateRoomParams,
 ) -> Result<CreateRoomResult, String> {
     state.ensure_startable()?;
+    let host_ip = candidate_host_ips()
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| "127.0.0.1".into());
     let psk = Zeroizing::new(generate_psk());
-    let room_code = create_room_code(
-        &params.host_ip,
-        params.port,
-        params.rotation_minutes,
-        psk.as_slice(),
-    )
-    .map_err(to_message)?;
     let psk_text = Zeroizing::new(psk_to_text(psk.as_slice()));
     let session_id = state.next_session_id.fetch_add(1, Ordering::Relaxed) + 1;
     let events = Arc::new(EventState::default());
-    *lock(&events.status) = format!("房间已创建，正在监听端口 {}，等待对方加入…", params.port);
+    *lock(&events.status) = "房间已创建，正在监听端口，等待对方加入…".into();
     let (sender, receiver) = mpsc::unbounded_channel();
+    // 端口传 0 由操作系统自动分配空闲端口（探测），换钥时间使用默认值。
     let connection = SecureConnection::listen(
-        params.port,
+        0,
         psk_text.as_str(),
         params.display_name,
-        SecureChatOptions {
-            rotation_minutes: params.rotation_minutes,
-            ..SecureChatOptions::default()
-        },
+        SecureChatOptions::default(),
         sender,
     )
     .await
     .map_err(to_message)?;
     let connection = Arc::new(connection);
+    let port = connection
+        .snapshot()
+        .local_port
+        .ok_or_else(|| "监听端口获取失败".to_string())?;
+    let room_code = create_room_code(
+        &host_ip,
+        port,
+        SecureChatOptions::default().rotation_minutes,
+        psk.as_slice(),
+    )
+    .map_err(to_message)?;
+    *lock(&events.status) = format!("房间已创建，正在监听端口 {port}，等待对方加入…");
     bridge::spawn(app, session_id, Arc::clone(&events), receiver);
     state.install(Arc::new(Session {
         id: session_id,
