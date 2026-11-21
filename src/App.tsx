@@ -15,6 +15,7 @@ export default function App() {
   // 首次启动（未设置过名称）时显示设置引导（issue #7）
   const [needsNameSetup, setNeedsNameSetup] = useState(() => !loadDisplayName());
   const [input, setInput] = useState('');
+  const [copiedFlash, setCopiedFlash] = useState(false);
   const [now, setNow] = useState(Date.now());
   const {
     state: session,
@@ -67,6 +68,12 @@ export default function App() {
     void sendMessage(config.displayName.trim(), content);
   };
 
+  const handleCopyRoomCode = () => {
+    void copyRoomCode();
+    setCopiedFlash(true);
+    window.setTimeout(() => setCopiedFlash(false), 1600);
+  };
+
   if (needsNameSetup) {
     return <NameSetup onSave={saveNameFromSetup} />;
   }
@@ -93,7 +100,7 @@ export default function App() {
   return (
     <main className="grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)_auto_auto] bg-bg font-sans text-ink">
       <h1 className="sr-only">SecureChat</h1>
-      <header className="z-10 flex items-center justify-between gap-3 border-b border-line bg-surface/90 px-4 py-2 backdrop-blur">
+      <header className="z-10 flex items-center justify-between gap-3 border-b border-line bg-surface/90 px-4 py-2.5 backdrop-blur">
         <div className="flex min-w-0 items-center gap-2.5">
           <span
             aria-hidden
@@ -103,23 +110,14 @@ export default function App() {
                 : 'animate-over-pulse bg-amber-400'
             }`}
           />
-          <div className="min-w-0">
-            <p className="m-0 truncate text-sm font-semibold leading-tight" aria-label="当前通话对象">
-              {headerTitle}
-            </p>
-            <p
-              className="m-0 truncate text-xs leading-tight text-ink-muted [overflow-wrap:anywhere]"
-              role="status"
-              aria-live="polite"
-            >
-              {session.status}
-            </p>
-          </div>
+          <p className="m-0 truncate text-sm font-semibold leading-tight" aria-label="当前通话对象">
+            {headerTitle}
+          </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {session.generatedCode && (
-            <button type="button" className={buttonSecondary} onClick={() => void copyRoomCode()}>
-              复制房间码
+            <button type="button" className={buttonSecondary} onClick={handleCopyRoomCode}>
+              {copiedFlash ? '已复制 ✓' : '复制房间码'}
             </button>
           )}
           {connected && session.overPhase === 'idle' && !session.overEnding && (
