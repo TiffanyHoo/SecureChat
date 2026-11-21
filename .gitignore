@@ -19,3 +19,6 @@ src-tauri/gen/
 TestResults/
 *.binlog
 *.log
+
+# 本地用 npm 安装依赖时的锁文件(仓库依赖由 pnpm-lock.yaml 管理)
+package-lock.json

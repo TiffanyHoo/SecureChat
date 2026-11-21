@@ -2,13 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { listHostIps } from './api';
 import { ConnectionPanel, type ConnectionConfig } from './components/ConnectionPanel';
 import { MessageList } from './components/MessageList';
+import { NameSetup, loadDisplayName, saveDisplayName } from './components/NameSetup';
 import { useSession } from './hooks/useSession';
 import { buttonPrimary } from './ui/ui';
 import { formatCountdown, isConnected } from './store';
 
 const initialConfig: ConnectionConfig = {
   mode: 'create',
-  displayName: '我',
+  displayName: '',
   hostIp: '127.0.0.1',
   port: '9001',
   rotationMinutes: '10',
@@ -16,7 +17,12 @@ const initialConfig: ConnectionConfig = {
 };
 
 export default function App() {
-  const [config, setConfig] = useState(initialConfig);
+  const [config, setConfig] = useState<ConnectionConfig>(() => ({
+    ...initialConfig,
+    displayName: loadDisplayName(),
+  }));
+  // 首次启动（未设置过名称）时显示设置引导（issue #7）
+  const [needsNameSetup, setNeedsNameSetup] = useState(() => !loadDisplayName());
   const [hostIps, setHostIps] = useState(['127.0.0.1']);
   const [input, setInput] = useState('');
   const [now, setNow] = useState(Date.now());
@@ -54,8 +60,16 @@ export default function App() {
   }, []);
 
   const connected = isConnected(session);
-  const changeConfig = (field: keyof ConnectionConfig, value: string) =>
+  const changeConfig = (field: keyof ConnectionConfig, value: string) => {
     setConfig((current) => ({ ...current, [field]: value }));
+    // 面板中修改显示名时同步持久化，保证下次启动使用最新名称
+    if (field === 'displayName' && value.trim()) saveDisplayName(value.trim());
+  };
+
+  const saveNameFromSetup = (name: string) => {
+    setConfig((current) => ({ ...current, displayName: name }));
+    setNeedsNameSetup(false);
+  };
 
   const submitConnection = () => {
     if (config.mode === 'create') {
@@ -80,6 +94,7 @@ export default function App() {
 
   return (
     <main className="grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)_auto_auto] bg-bg font-sans text-ink">
+      {needsNameSetup && <NameSetup onSave={saveNameFromSetup} />}
       <header className="z-10 border-b border-line bg-surface/90 backdrop-blur">
         <div className="flex items-baseline gap-3 px-4 pt-3">
           <h1 id="app-title" className="m-0 flex items-center gap-2 text-lg font-semibold tracking-tight">

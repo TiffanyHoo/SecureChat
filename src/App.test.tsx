@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { DISPLAY_NAME_STORAGE_KEY } from './components/NameSetup';
 import type { SessionEvent, SessionSnapshot } from './types';
 
 const mocks = vi.hoisted(() => ({
@@ -47,6 +48,7 @@ const emptySnapshot: SessionSnapshot = {
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     mocks.eventHandler = undefined;
     mocks.onSessionEvent.mockImplementation((handler) => {
       mocks.eventHandler = handler;
@@ -60,9 +62,35 @@ describe('App', () => {
     mocks.disconnect.mockResolvedValue(undefined);
   });
 
+  // 首次启动会先弹出显示名设置引导（issue #7），此辅助完成设置流程
+  const completeNameSetup = (name: string) => {
+    fireEvent.change(screen.getByPlaceholderText('输入显示名'), { target: { value: name } });
+    fireEvent.click(screen.getByRole('button', { name: '保存并继续' }));
+  };
+
+  it('首次启动要求设置显示名并保存到 localStorage', () => {
+    render(<App />);
+    expect(screen.getByRole('button', { name: '保存并继续' })).toBeInTheDocument();
+
+    completeNameSetup('阿汤');
+
+    expect(window.localStorage.getItem(DISPLAY_NAME_STORAGE_KEY)).toBe('阿汤');
+    expect(screen.getByLabelText('我的显示名')).toHaveValue('阿汤');
+    expect(screen.queryByPlaceholderText('输入显示名')).not.toBeInTheDocument();
+  });
+
+  it('已保存过名称时启动直接使用，不再弹设置引导', () => {
+    window.localStorage.setItem(DISPLAY_NAME_STORAGE_KEY, '老用户');
+    render(<App />);
+
+    expect(screen.queryByRole('button', { name: '保存并继续' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('我的显示名')).toHaveValue('老用户');
+  });
+
   it('创建后立即展示可复制的房间码', async () => {
     render(<App />);
     await waitFor(() => expect(mocks.onSessionEvent).toHaveBeenCalled());
+    completeNameSetup('我');
     fireEvent.click(screen.getByRole('button', { name: '创建房间' }));
 
     await waitFor(() =>
@@ -80,6 +108,7 @@ describe('App', () => {
   it('建立连接后通过原生表单发送消息', async () => {
     render(<App />);
     await waitFor(() => expect(mocks.eventHandler).toBeDefined());
+    completeNameSetup('我');
     fireEvent.click(screen.getByRole('button', { name: '创建房间' }));
     await waitFor(() => expect(screen.getByLabelText('生成的房间码')).toHaveValue('SC1-test-room'));
 
