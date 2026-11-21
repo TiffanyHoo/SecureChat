@@ -3618,7 +3618,7 @@ dependencies = [
 
 [[package]]
 name = "securechat"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "securechat-core",
  "serde",
@@ -3634,7 +3634,7 @@ dependencies = [
 
 [[package]]
 name = "securechat-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
