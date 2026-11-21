@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  autoUpdate,
+  FloatingPortal,
+  offset,
+  useDismiss,
+  useFloating,
+  useInteractions,
+} from '@floating-ui/react';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { buttonOver, buttonSecondary } from '../ui/ui';
+import { emojiMaxScale, emojiPulse, springEnter, springPop } from '../ui/motion';
 import type { ChatMessage, ReactionKey } from '../store';
 
 interface MessageListProps {
@@ -15,6 +25,12 @@ const REACTION_LABELS: Record<ReactionKey, string> = {
   copythat: '📻 COPY THAT',
 };
 
+const REACTION_EMOJI: Record<ReactionKey, string> = {
+  like: '👍',
+  heart: '❤️',
+  copythat: '📻',
+};
+
 const REACTION_ARIA: Record<ReactionKey, string> = {
   like: '回应：赞',
   heart: '回应：爱心',
@@ -23,17 +39,101 @@ const REACTION_ARIA: Record<ReactionKey, string> = {
 
 const REACTION_ORDER: ReactionKey[] = ['like', 'heart', 'copythat'];
 const STAMP_DURATION_MS = 1400;
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
 
 const timeFormatter = new Intl.DateTimeFormat('zh-CN', {
   hour: '2-digit',
   minute: '2-digit',
 });
 
+function isSameGroup(previous: ChatMessage | undefined, current: ChatMessage) {
+  if (!previous) return false;
+  if (previous.kind === 'system' || previous.kind === 'over-card') return false;
+  if (current.kind === 'system' || current.kind === 'over-card') return false;
+  if (previous.kind !== current.kind || previous.sender !== current.sender) return false;
+  if (previous.sentAtUnixMs === undefined || current.sentAtUnixMs === undefined) return false;
+
+  const interval = current.sentAtUnixMs - previous.sentAtUnixMs;
+  return interval >= 0 && interval <= GROUP_WINDOW_MS;
+}
+
 const hasCopythat = (message: ChatMessage) =>
   (message.reactions ?? []).some((entry) => entry.reaction === 'copythat');
 
 const hasSelfReaction = (message: ChatMessage, reaction: ReactionKey) =>
   (message.reactions ?? []).some((entry) => entry.reaction === reaction && entry.self);
+
+interface ReactionPanelProps {
+  message: ChatMessage | null;
+  referenceElement: HTMLDivElement | null;
+  onClose: () => void;
+  onReaction: (message: ChatMessage, reaction: ReactionKey) => void;
+}
+
+function ReactionPanel({ message, referenceElement, onClose, onReaction }: ReactionPanelProps) {
+  const open = message !== null;
+  const { refs, floatingStyles, context } = useFloating({
+    open,
+    elements: { reference: referenceElement },
+    onOpenChange: (nextOpen, _event, reason) => {
+      if (nextOpen) return;
+      onClose();
+      if (reason === 'escape-key') referenceElement?.focus();
+    },
+    placement: 'top-start',
+    strategy: 'fixed',
+    transform: false,
+    middleware: [offset(8)],
+    whileElementsMounted: autoUpdate,
+  });
+  const dismiss = useDismiss(context, { enabled: open });
+  const { getFloatingProps } = useInteractions([dismiss]);
+
+  return (
+    <FloatingPortal>
+      <AnimatePresence>
+        {message && (
+          <motion.div
+            key="message-reaction-panel"
+            id="message-reaction-panel"
+            ref={refs.setFloating}
+            style={{ ...floatingStyles, transformOrigin: 'top left' }}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={springPop}
+            role="group"
+            aria-label="添加回应"
+            className="z-50 flex origin-top-left gap-0.5 rounded-full border border-line bg-surface p-0.5 shadow-lg"
+            {...getFloatingProps()}
+          >
+            {REACTION_ORDER.map((reaction) => {
+              const active = hasSelfReaction(message, reaction);
+              return (
+                <button
+                  key={reaction}
+                  type="button"
+                  autoFocus={reaction === 'like'}
+                  aria-pressed={active}
+                  aria-label={REACTION_ARIA[reaction]}
+                  title={REACTION_ARIA[reaction]}
+                  onClick={() => onReaction(message, reaction)}
+                  className={`min-h-7 min-w-7 cursor-pointer rounded-full border px-1.5 py-0.5 text-xs whitespace-nowrap motion-safe:transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${
+                    active
+                      ? 'border-accent bg-accent-soft font-medium text-accent'
+                      : 'border-line bg-surface text-ink hover:border-accent/60 hover:bg-surface-muted'
+                  }`}
+                >
+                  <span aria-hidden="true">{REACTION_LABELS[reaction]}</span>
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </FloatingPortal>
+  );
+}
 
 function ReactionChips({ message, mine }: { message: ChatMessage; mine: boolean }) {
   const entries = message.reactions ?? [];
@@ -48,40 +148,76 @@ function ReactionChips({ message, mine }: { message: ChatMessage; mine: boolean 
   if (counts.size === 0) return null;
   return (
     <div
-      className={`absolute top-full z-10 flex max-w-[min(23rem,80vw)] -translate-y-1/2 flex-wrap gap-1 ${
-        mine ? 'right-0' : 'left-0'
+      className={`mt-1 flex max-w-[min(23rem,80vw)] flex-wrap gap-1 ${
+        mine ? 'justify-end' : 'justify-start'
       }`}
       aria-label="消息回应"
     >
-      {REACTION_ORDER.filter((key) => counts.has(key)).map((key) => {
-        const { count, self } = counts.get(key)!;
-        return (
-          <span
-            key={key}
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-md ${
-              self ? 'border-accent/70 bg-accent-soft text-accent' : 'border-line bg-surface text-ink'
-            }`}
-          >
-            {REACTION_LABELS[key]}
-            {count > 1 && <b className="font-semibold text-ink-muted">×{count}</b>}
-          </span>
-        );
-      })}
+      <AnimatePresence initial={false}>
+        {REACTION_ORDER.filter((key) => counts.has(key)).map((key, index) => {
+          const { count, self } = counts.get(key)!;
+          return (
+            <motion.span
+              key={key}
+              layout
+              initial={{ opacity: 0, scale: 0.4 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.4 }}
+              transition={springPop}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-md ${
+                self ? 'border-accent/70 bg-accent-soft text-accent' : 'border-line bg-surface text-ink'
+              }`}
+            >
+              <motion.span
+                key={`${key}-${count}`}
+                initial={{ scale: 1, y: 0 }}
+                animate={{ scale: [1, emojiMaxScale, 1], y: [0, -2, 0] }}
+                transition={{ ...emojiPulse, delay: index * 0.1 }}
+                className="inline-block"
+              >
+                {REACTION_EMOJI[key]}
+              </motion.span>
+              {key === 'copythat' && <span>COPY THAT</span>}
+              {count > 1 && (
+                <motion.b
+                  key={count}
+                  initial={{ scale: 0.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={springPop}
+                  className="inline-block font-semibold text-ink-muted"
+                >
+                  ×{count}
+                </motion.b>
+              )}
+            </motion.span>
+          );
+        })}
+      </AnimatePresence>
     </div>
   );
 }
 
 export function MessageList({ messages, onRespondOver, onToggleReaction }: MessageListProps) {
   const listRef = useRef<HTMLOListElement>(null);
+  const bubbleRefs = useRef(new Map<string, HTMLDivElement>());
   const stickToBottom = useRef(true);
   const [stamped, setStamped] = useState<string[]>([]);
+  const [activeReactionId, setActiveReactionId] = useState<string | null>(null);
   // 记录上一帧每条消息的 copythat 状态：新增时触发印章（本地/远端一致），取消不触发
   const copythatState = useRef(new Map<string, boolean>());
+  const activeReactionMessage =
+    messages.find(
+      (message) =>
+        message.id === activeReactionId && message.kind === 'theirs' && message.uid !== undefined,
+    ) ?? null;
+  const activeReferenceElement = activeReactionId
+    ? (bubbleRefs.current.get(activeReactionId) ?? null)
+    : null;
 
   useEffect(() => {
     const list = listRef.current;
     if (list && stickToBottom.current) list.scrollTop = list.scrollHeight;
-  }, [messages.length]);
+  }, [messages]);
 
   useEffect(() => {
     const current = new Map<string, boolean>();
@@ -105,6 +241,10 @@ export function MessageList({ messages, onRespondOver, onToggleReaction }: Messa
     setStamped((list) => [...new Set([...list, ...newlyStamped])]);
   }, [messages]);
 
+  useEffect(() => {
+    if (activeReactionId && !activeReactionMessage) setActiveReactionId(null);
+  }, [activeReactionId, activeReactionMessage]);
+
   const handleCopyThat = (message: ChatMessage) => {
     if (!message.uid) return;
     if (!hasSelfReaction(message, 'copythat')) {
@@ -113,35 +253,49 @@ export function MessageList({ messages, onRespondOver, onToggleReaction }: Messa
     onToggleReaction(message.uid, 'copythat');
   };
 
+  const handleReaction = (message: ChatMessage, reaction: ReactionKey) => {
+    if (reaction === 'copythat') handleCopyThat(message);
+    else if (message.uid) onToggleReaction(message.uid, reaction);
+    setActiveReactionId(null);
+    bubbleRefs.current.get(message.id)?.focus();
+  };
+
   return (
-    <ol
-      ref={listRef}
-      className="m-0 flex min-h-0 list-none flex-col gap-2.5 overflow-y-auto px-3 py-2.5 [scrollbar-gutter:stable]"
-      aria-label="聊天记录"
-      aria-live="polite"
-      aria-relevant="additions"
-      role="list"
-      onScroll={(event) => {
-        const list = event.currentTarget;
-        stickToBottom.current = list.scrollHeight - list.scrollTop - list.clientHeight < 32;
-      }}
-    >
-      {messages.map((message) => {
+    <>
+      <ol
+        ref={listRef}
+        className="m-0 flex min-h-0 list-none flex-col overflow-y-auto px-3 pb-2.5 pt-4 [scrollbar-gutter:stable] [scroll-behavior:smooth]"
+        aria-label="聊天记录"
+        aria-live="polite"
+        aria-relevant="additions"
+        role="list"
+        onScroll={(event) => {
+          const list = event.currentTarget;
+          stickToBottom.current = list.scrollHeight - list.scrollTop - list.clientHeight < 32;
+        }}
+      >
+      {messages.map((message, index) => {
         if (message.kind === 'system') {
           return (
-            <li
+            <motion.li
               key={message.id}
-              className="mx-auto max-w-[90%] px-2 py-1 text-center text-xs italic leading-relaxed text-ink-muted [overflow-wrap:anywhere]"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="mx-auto mt-4 max-w-[90%] px-2 py-1 text-center text-xs italic leading-relaxed text-ink-muted [overflow-wrap:anywhere] first:mt-0"
             >
               {message.content}
-            </li>
+            </motion.li>
           );
         }
         if (message.kind === 'over-card') {
           return (
-            <li
+            <motion.li
               key={message.id}
-              className="mx-auto grid w-[min(22rem,90%)] gap-2.5 rounded-2xl border border-over/40 bg-surface p-4 text-center shadow-lg animate-card-in"
+              initial={{ opacity: 0, y: 18, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={springEnter}
+              className="mx-auto mt-4 grid w-[min(22rem,90%)] gap-2.5 rounded-2xl border border-over/40 bg-surface p-4 text-center shadow-lg first:mt-0"
             >
               <strong className="text-sm font-semibold text-over">OVER！要结束这次通话吗？</strong>
               <span className="text-xs text-ink-muted">双方都同意才会挂断</span>
@@ -153,22 +307,54 @@ export function MessageList({ messages, onRespondOver, onToggleReaction }: Messa
                   不 OVER，继续聊
                 </button>
               </div>
-            </li>
+            </motion.li>
           );
         }
         const mine = message.kind === 'mine';
+        const isGroupStart = !isSameGroup(messages[index - 1], message);
+        const sentAt = message.sentAtUnixMs ?? Date.now();
+        const formattedTime = timeFormatter.format(sentAt);
         const stampedNow = message.uid !== undefined && stamped.includes(message.uid);
         return (
-          <li
+          <motion.li
             key={message.id}
-            className={`group flex w-fit max-w-[min(23rem,80%)] flex-col animate-bubble-in ${
-              mine ? 'self-end items-end' : 'self-start items-start'
-            }`}
+            initial={{ opacity: 0, y: -14, x: mine ? 10 : -10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, x: 0, scale: 1 }}
+            transition={springEnter}
+            className={`group relative flex w-full flex-col ${
+              isGroupStart ? 'mt-4' : 'mt-1.5'
+            } ${mine ? 'items-end' : 'items-start'} first:mt-0`}
           >
-            <div className="mx-2 mb-0.5 text-[0.68rem] text-ink-muted">
-              {message.sender} · {timeFormatter.format(message.sentAtUnixMs ?? Date.now())}
-            </div>
-            <div className="relative inline-flex max-w-full">
+            {isGroupStart && (
+              <div className="mx-2 mb-0.5 text-[0.68rem] text-ink-muted">
+                {message.sender} ·{' '}
+                <time dateTime={new Date(sentAt).toISOString()}>{formattedTime}</time>
+              </div>
+            )}
+            <div
+              ref={(element) => {
+                if (element) bubbleRefs.current.set(message.id, element);
+                else bubbleRefs.current.delete(message.id);
+              }}
+              tabIndex={!mine && message.uid ? 0 : undefined}
+              role={!mine && message.uid ? 'group' : undefined}
+              aria-label={!mine && message.uid ? `消息：${message.content}` : undefined}
+              aria-keyshortcuts={!mine && message.uid ? 'Shift+F10' : undefined}
+              aria-expanded={!mine && message.uid ? activeReactionId === message.id : undefined}
+              aria-controls={activeReactionId === message.id ? 'message-reaction-panel' : undefined}
+              onContextMenu={(event) => {
+                if (mine || !message.uid) return;
+                event.preventDefault();
+                setActiveReactionId(message.id);
+              }}
+              onKeyDown={(event) => {
+                if (mine || !message.uid) return;
+                if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return;
+                event.preventDefault();
+                setActiveReactionId(message.id);
+              }}
+              className="relative inline-flex max-w-[min(23rem,80%)] rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            >
               <div
                 className={`px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap select-text shadow-sm [overflow-wrap:anywhere] ${
                   mine
@@ -178,49 +364,48 @@ export function MessageList({ messages, onRespondOver, onToggleReaction }: Messa
               >
                 {message.content}
               </div>
+              {!isGroupStart && (
+                <time
+                  dateTime={new Date(sentAt).toISOString()}
+                  className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-[0.68rem] whitespace-nowrap text-ink-muted opacity-0 motion-safe:transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100 ${
+                    mine ? 'right-full mr-2' : 'left-full ml-2'
+                  }`}
+                >
+                  {formattedTime}
+                </time>
+              )}
               {stampedNow && (
-                <span
-                  className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl border-2 border-over bg-surface/80 font-mono text-sm font-bold tracking-[0.12em] text-over animate-radio-stamp"
+                <motion.span
+                  initial={{ opacity: 0, scale: 2.4, rotate: -10 }}
+                  animate={{
+                    opacity: [0, 1, 1, 0],
+                    scale: [2.4, 1, 1.08, 1],
+                    rotate: [-10, -3, -1.8, -3],
+                  }}
+                  transition={{
+                    duration: STAMP_DURATION_MS / 1000,
+                    times: [0, 0.18, 0.3, 1],
+                    ease: 'easeOut',
+                  }}
+                  className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl border-2 border-over bg-surface/80 font-mono text-sm font-bold tracking-[0.12em] text-over"
                   role="img"
                   aria-label="Copy that"
                 >
                   COPY THAT ✓
-                </span>
+                </motion.span>
               )}
-              <ReactionChips message={message} mine={mine} />
             </div>
-            {!mine && message.uid !== undefined && (
-              <div
-                className="pointer-events-none mt-4 flex translate-y-0.5 gap-1 opacity-0 transition duration-150 ease-out group-hover:pointer-events-auto group-hover:opacity-100 group-hover:translate-y-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-focus-within:translate-y-0"
-                aria-label="添加回应"
-              >
-                {REACTION_ORDER.map((reaction) => {
-                  const active = hasSelfReaction(message, reaction);
-                  return (
-                    <button
-                      key={reaction}
-                      type="button"
-                      aria-pressed={active}
-                      aria-label={REACTION_ARIA[reaction]}
-                      onClick={() => {
-                        if (reaction === 'copythat') handleCopyThat(message);
-                        else onToggleReaction(message.uid!, reaction);
-                      }}
-                      className={`min-h-7 cursor-pointer rounded-full border px-2.5 py-0.5 text-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${
-                        active
-                          ? 'border-accent bg-accent-soft font-medium text-accent'
-                          : 'border-line bg-surface text-ink hover:border-accent/60 hover:bg-surface-muted'
-                      }`}
-                    >
-                      {reaction === 'copythat' ? 'COPY THAT' : REACTION_LABELS[reaction]}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </li>
+            <ReactionChips message={message} mine={mine} />
+          </motion.li>
         );
       })}
-    </ol>
+      </ol>
+      <ReactionPanel
+        message={activeReactionMessage}
+        referenceElement={activeReferenceElement}
+        onClose={() => setActiveReactionId(null)}
+        onReaction={handleReaction}
+      />
+    </>
   );
 }

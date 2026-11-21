@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { ConnectionPanel, type ConnectionConfig } from './components/ConnectionPanel';
 import { MessageList } from './components/MessageList';
 import { NameSetup, loadDisplayName, saveDisplayName } from './components/NameSetup';
 import { useSession } from './hooks/useSession';
 import { buttonOver, buttonPrimary, buttonSecondary, buttonText } from './ui/ui';
+import { breathPulse, springEnter, springPop, statusRipple } from './ui/motion';
 import { formatCountdown, isConnected, isBusy } from './store';
 
 export default function App() {
@@ -98,18 +100,34 @@ export default function App() {
       : '正在连接…';
 
   return (
-    <main className="grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)_auto_auto] bg-bg font-sans text-ink">
+    <motion.main
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={springEnter}
+      className="grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)_auto_auto] bg-bg font-sans text-ink"
+    >
       <h1 className="sr-only">SecureChat</h1>
       <header className="z-10 flex items-center justify-between gap-3 border-b border-line bg-surface/90 px-4 py-2.5 backdrop-blur">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span
+          <motion.span
             aria-hidden
-            className={`size-2.5 shrink-0 rounded-full ${
+            className={`relative inline-flex size-2.5 shrink-0 rounded-full ${
               connected
                 ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]'
-                : 'animate-over-pulse bg-amber-400'
+                : 'bg-amber-400'
             }`}
-          />
+            animate={connected ? undefined : { opacity: [1, 0.35, 1] }}
+            transition={connected ? undefined : breathPulse}
+          >
+            {connected && (
+              <motion.span
+                className="absolute inset-0 rounded-full bg-emerald-500"
+                initial={{ scale: 1, opacity: 0.45 }}
+                animate={{ scale: 2.6, opacity: 0 }}
+                transition={statusRipple}
+              />
+            )}
+          </motion.span>
           <p className="m-0 truncate text-sm font-semibold leading-tight" aria-label="当前通话对象">
             {headerTitle}
           </p>
@@ -117,7 +135,18 @@ export default function App() {
         <div className="flex shrink-0 items-center gap-2">
           {session.generatedCode && (
             <button type="button" className={buttonSecondary} onClick={handleCopyRoomCode}>
-              {copiedFlash ? '已复制 ✓' : '复制房间码'}
+              <AnimatePresence initial={false}>
+                <motion.span
+                  key={copiedFlash ? 'copied' : 'copy'}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={springPop}
+                  className="inline-block"
+                >
+                  {copiedFlash ? '已复制 ✓' : '复制房间码'}
+                </motion.span>
+              </AnimatePresence>
             </button>
           )}
           {connected && session.overPhase === 'idle' && !session.overEnding && (
@@ -127,7 +156,9 @@ export default function App() {
           )}
           {session.overPhase === 'waiting' && !session.overEnding && (
             <div className="flex items-center gap-1.5 text-sm" role="status">
-              <span className="animate-over-pulse">OVER 已发出…</span>
+              <motion.span animate={{ opacity: [1, 0.35, 1] }} transition={breathPulse}>
+                OVER 已发出…
+              </motion.span>
               <button type="button" className={buttonText} onClick={() => void cancelOver()}>
                 撤回
               </button>
@@ -182,6 +213,6 @@ export default function App() {
           {session.rekeying ? '换钥中…' : '立即换钥'}
         </button>
       </footer>
-    </main>
+    </motion.main>
   );
 }

@@ -1,6 +1,8 @@
 import type { FormEvent } from 'react';
+import { motion } from 'motion/react';
 import { isBusy, type SessionState } from '../store';
 import { buttonPrimary, buttonSecondary, inputBase } from '../ui/ui';
+import { springEnter } from '../ui/motion';
 
 export interface ConnectionConfig {
   mode: 'create' | 'join';
@@ -43,8 +45,11 @@ export function ConnectionPanel({
 
   return (
     <div className="grid h-dvh w-full place-items-center bg-bg px-4 font-sans text-ink">
-      <form
-        className="grid w-full max-w-sm gap-4 rounded-2xl border border-line bg-surface p-5 shadow-lg animate-card-in"
+      <motion.form
+        initial={{ opacity: 0, y: 18, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={springEnter}
+        className="grid w-full max-w-sm gap-4 rounded-2xl border border-line bg-surface p-5 shadow-lg"
         onSubmit={submit}
         aria-label="开始安全通话"
       >
@@ -175,7 +180,7 @@ export function ConnectionPanel({
         >
           {session.status}
         </p>
-      </form>
+      </motion.form>
     </div>
   );
 }
