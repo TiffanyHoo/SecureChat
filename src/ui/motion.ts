@@ -24,6 +24,12 @@ export const emojiPulse: Transition = {
 
 export const emojiMaxScale = 2.5;
 
+/** 回应 chip 取消：下滑淡出，短促干净，不回弹 */
+export const chipExit: Transition = {
+  duration: 0.15,
+  ease: 'easeOut',
+};
+
 /** 已连接状态灯：柔和波纹扩散 */
 export const statusRipple: Transition = {
   duration: 1.45,

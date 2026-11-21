@@ -182,9 +182,7 @@ describe('MessageList 右键回应面板', () => {
     fireEvent.contextMenu(bubble);
 
     expect(screen.getByRole('group', { name: '添加回应' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '回应：Copy that' })).toHaveTextContent(
-      '📻 COPY THAT',
-    );
+    expect(screen.getByRole('button', { name: '回应：Copy that' })).toHaveTextContent('📻');
     expect(bubble).toHaveAttribute('aria-expanded', 'true');
   });
 

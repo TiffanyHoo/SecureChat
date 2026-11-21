@@ -10,7 +10,7 @@ import {
 } from '@floating-ui/react';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { buttonOver, buttonSecondary } from '../ui/ui';
-import { emojiMaxScale, emojiPulse, springEnter, springPop } from '../ui/motion';
+import { emojiMaxScale, chipExit, emojiPulse, springEnter, springPop } from '../ui/motion';
 import type { ChatMessage, ReactionKey } from '../store';
 
 interface MessageListProps {
@@ -18,12 +18,6 @@ interface MessageListProps {
   onRespondOver: (accept: boolean) => void;
   onToggleReaction: (uid: string, reaction: ReactionKey) => void;
 }
-
-const REACTION_LABELS: Record<ReactionKey, string> = {
-  like: '👍',
-  heart: '❤️',
-  copythat: '📻 COPY THAT',
-};
 
 const REACTION_EMOJI: Record<ReactionKey, string> = {
   like: '👍',
@@ -124,7 +118,7 @@ function ReactionPanel({ message, referenceElement, onClose, onReaction }: React
                       : 'border-line bg-surface text-ink hover:border-accent/60 hover:bg-surface-muted'
                   }`}
                 >
-                  <span aria-hidden="true">{REACTION_LABELS[reaction]}</span>
+                  <span aria-hidden="true">{REACTION_EMOJI[reaction]}</span>
                 </button>
               );
             })}
@@ -135,12 +129,52 @@ function ReactionPanel({ message, referenceElement, onClose, onReaction }: React
   );
 }
 
+function ReactionChip({
+  reactionKey,
+  count,
+  self,
+}: {
+  reactionKey: ReactionKey;
+  count: number;
+  self: boolean;
+}) {
+  // 仅在计数增加时触发表情跳动，取消（计数递减）时保持原样不跳动
+  const prevCount = useRef(0);
+  const increments = useRef(0);
+  if (count > prevCount.current) increments.current += 1;
+  prevCount.current = count;
+  return (
+    // layout="position" 只补间位置不碰 scale，避免与下方缩放动画冲突
+    <motion.span
+      layout="position"
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, y: 4, transition: chipExit }}
+      transition={springPop}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-md ${
+        self ? 'border-accent/70 bg-accent-soft text-accent' : 'border-line bg-surface text-ink'
+      }`}
+    >
+      <motion.span
+        key={`pulse-${increments.current}`}
+        initial={{ scale: 1, y: 0 }}
+        animate={{ scale: [1, emojiMaxScale, 1], y: [0, -2, 0] }}
+        transition={emojiPulse}
+        className="inline-block"
+      >
+        {REACTION_EMOJI[reactionKey]}
+      </motion.span>
+      {count > 1 && <b className="inline-block font-semibold text-ink-muted">×{count}</b>}
+    </motion.span>
+  );
+}
+
 function ReactionChips({ message, mine }: { message: ChatMessage; mine: boolean }) {
   const entries = message.reactions ?? [];
   if (entries.length === 0) return null;
   const counts = new Map<ReactionKey, { count: number; self: boolean }>();
   for (const entry of entries) {
-    if (!(entry.reaction in REACTION_LABELS)) continue;
+    if (!(entry.reaction in REACTION_EMOJI)) continue;
     const key = entry.reaction as ReactionKey;
     const current = counts.get(key) ?? { count: 0, self: false };
     counts.set(key, { count: current.count + 1, self: current.self || entry.self });
@@ -153,45 +187,16 @@ function ReactionChips({ message, mine }: { message: ChatMessage; mine: boolean 
       }`}
       aria-label="消息回应"
     >
-      <AnimatePresence initial={false}>
-        {REACTION_ORDER.filter((key) => counts.has(key)).map((key, index) => {
-          const { count, self } = counts.get(key)!;
-          return (
-            <motion.span
-              key={key}
-              layout
-              initial={{ opacity: 0, scale: 0.4 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.4 }}
-              transition={springPop}
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-md ${
-                self ? 'border-accent/70 bg-accent-soft text-accent' : 'border-line bg-surface text-ink'
-              }`}
-            >
-              <motion.span
-                key={`${key}-${count}`}
-                initial={{ scale: 1, y: 0 }}
-                animate={{ scale: [1, emojiMaxScale, 1], y: [0, -2, 0] }}
-                transition={{ ...emojiPulse, delay: index * 0.1 }}
-                className="inline-block"
-              >
-                {REACTION_EMOJI[key]}
-              </motion.span>
-              {key === 'copythat' && <span>COPY THAT</span>}
-              {count > 1 && (
-                <motion.b
-                  key={count}
-                  initial={{ scale: 0.6, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={springPop}
-                  className="inline-block font-semibold text-ink-muted"
-                >
-                  ×{count}
-                </motion.b>
-              )}
-            </motion.span>
-          );
-        })}
+      {/* popLayout 让退出元素立即脱离文档流，补位重排与进出场动画同时进行 */}
+      <AnimatePresence mode="popLayout">
+        {REACTION_ORDER.filter((key) => counts.has(key)).map((key) => (
+          <ReactionChip
+            key={key}
+            reactionKey={key}
+            count={counts.get(key)!.count}
+            self={counts.get(key)!.self}
+          />
+        ))}
       </AnimatePresence>
     </div>
   );
