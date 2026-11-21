@@ -269,7 +269,7 @@ export function MessageList({ messages, onRespondOver, onToggleReaction }: Messa
     <>
       <ol
         ref={listRef}
-        className="m-0 flex min-h-0 list-none flex-col overflow-y-auto px-3 pb-2.5 pt-4 [scrollbar-gutter:stable] [scroll-behavior:smooth]"
+        className="m-0 flex min-h-0 list-none flex-col overflow-x-clip overflow-y-auto px-3 pb-2.5 pt-4 [scrollbar-gutter:stable] [scroll-behavior:smooth]"
         aria-label="聊天记录"
         aria-live="polite"
         aria-relevant="additions"
