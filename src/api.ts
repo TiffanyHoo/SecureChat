@@ -10,7 +10,6 @@ import type {
   SessionSnapshot,
 } from './types';
 
-export const listHostIps = () => invoke<string[]>('list_host_ips');
 export const createRoom = (params: CreateRoomParams) =>
   invoke<CreateRoomResult>('create_room', { params });
 export const joinRoom = (params: JoinRoomParams) =>

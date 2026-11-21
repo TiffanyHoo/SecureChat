@@ -9,7 +9,6 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(commands::AppState::default())
         .invoke_handler(tauri::generate_handler![
-            commands::list_host_ips,
             commands::create_room,
             commands::join_room,
             commands::get_snapshot,

@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "SecureChat 安全通话",
-        "width": 760,
-        "height": 760,
+        "width": 500,
+        "height": 800,
         "minWidth": 500,
         "minHeight": 640,
         "center": true

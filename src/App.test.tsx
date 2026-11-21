@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   eventHandler: undefined as ((event: SessionEvent) => void) | undefined,
   onSessionEvent: vi.fn(),
   getSnapshot: vi.fn(),
-  listHostIps: vi.fn(),
   writeText: vi.fn(),
 }));
 
@@ -29,7 +28,6 @@ vi.mock('./api', () => ({
   sendOver: mocks.sendOver,
   onSessionEvent: mocks.onSessionEvent,
   getSnapshot: mocks.getSnapshot,
-  listHostIps: mocks.listHostIps,
 }));
 
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({ writeText: mocks.writeText }));
@@ -55,7 +53,6 @@ describe('App', () => {
       return Promise.resolve(vi.fn());
     });
     mocks.getSnapshot.mockResolvedValue(emptySnapshot);
-    mocks.listHostIps.mockResolvedValue(['127.0.0.1', '192.168.1.8']);
     mocks.createRoom.mockResolvedValue({ sessionId: 1, roomCode: 'SC1-test-room' });
     mocks.sendMessage.mockResolvedValue(undefined);
     mocks.sendOver.mockResolvedValue(undefined);
@@ -87,30 +84,25 @@ describe('App', () => {
     expect(screen.getByLabelText('我的显示名')).toHaveValue('老用户');
   });
 
-  it('创建后立即展示可复制的房间码', async () => {
+  it('创建后进入房间并展示可复制的房间码', async () => {
     render(<App />);
     await waitFor(() => expect(mocks.onSessionEvent).toHaveBeenCalled());
-    completeNameSetup('我');
+    completeNameSetup('小明');
     fireEvent.click(screen.getByRole('button', { name: '创建房间' }));
 
     await waitFor(() =>
-      expect(mocks.createRoom).toHaveBeenCalledWith({
-        hostIp: '127.0.0.1',
-        port: 9001,
-        rotationMinutes: 10,
-        displayName: '我',
-      }),
+      expect(mocks.createRoom).toHaveBeenCalledWith({ displayName: '小明' }),
     );
-    expect(screen.getByLabelText('生成的房间码')).toHaveValue('SC1-test-room');
+    expect(screen.getByText('等待对方加入…')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '复制房间码' })).toBeEnabled();
   });
 
   it('建立连接后通过原生表单发送消息', async () => {
     render(<App />);
     await waitFor(() => expect(mocks.eventHandler).toBeDefined());
-    completeNameSetup('我');
+    completeNameSetup('小明');
     fireEvent.click(screen.getByRole('button', { name: '创建房间' }));
-    await waitFor(() => expect(screen.getByLabelText('生成的房间码')).toHaveValue('SC1-test-room'));
+    await screen.findByLabelText('消息内容');
 
     act(() => {
       mocks.eventHandler?.({

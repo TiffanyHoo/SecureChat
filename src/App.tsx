@@ -1,29 +1,19 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { listHostIps } from './api';
 import { ConnectionPanel, type ConnectionConfig } from './components/ConnectionPanel';
 import { MessageList } from './components/MessageList';
 import { NameSetup, loadDisplayName, saveDisplayName } from './components/NameSetup';
 import { useSession } from './hooks/useSession';
-import { buttonPrimary } from './ui/ui';
-import { formatCountdown, isConnected } from './store';
-
-const initialConfig: ConnectionConfig = {
-  mode: 'create',
-  displayName: '',
-  hostIp: '127.0.0.1',
-  port: '9001',
-  rotationMinutes: '10',
-  roomCode: '',
-};
+import { buttonOver, buttonPrimary, buttonSecondary, buttonText } from './ui/ui';
+import { formatCountdown, isConnected, isBusy } from './store';
 
 export default function App() {
   const [config, setConfig] = useState<ConnectionConfig>(() => ({
-    ...initialConfig,
+    mode: 'create',
     displayName: loadDisplayName(),
+    roomCode: '',
   }));
   // 首次启动（未设置过名称）时显示设置引导（issue #7）
   const [needsNameSetup, setNeedsNameSetup] = useState(() => !loadDisplayName());
-  const [hostIps, setHostIps] = useState(['127.0.0.1']);
   const [input, setInput] = useState('');
   const [now, setNow] = useState(Date.now());
   const {
@@ -41,25 +31,13 @@ export default function App() {
   } = useSession();
 
   useEffect(() => {
-    let active = true;
-    void listHostIps()
-      .then((ips) => {
-        if (!active || ips.length === 0) return;
-        setHostIps(ips);
-        setConfig((current) => ({ ...current, hostIp: ips.includes(current.hostIp) ? current.hostIp : ips[0] }));
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
   const connected = isConnected(session);
+  const busy = isBusy(session);
+  const inChat = connected || busy;
   const changeConfig = (field: keyof ConnectionConfig, value: string) => {
     setConfig((current) => ({ ...current, [field]: value }));
     // 面板中修改显示名时同步持久化，保证下次启动使用最新名称
@@ -74,9 +52,6 @@ export default function App() {
   const submitConnection = () => {
     if (config.mode === 'create') {
       void createRoom({
-        hostIp: config.hostIp,
-        port: Number(config.port),
-        rotationMinutes: Number(config.rotationMinutes),
         displayName: config.displayName.trim(),
       });
     } else {
@@ -92,35 +67,80 @@ export default function App() {
     void sendMessage(config.displayName.trim(), content);
   };
 
+  if (needsNameSetup) {
+    return <NameSetup onSave={saveNameFromSetup} />;
+  }
+
+  if (!inChat) {
+    return (
+      <ConnectionPanel
+        config={config}
+        session={session}
+        onChange={changeConfig}
+        onSubmit={submitConnection}
+        onCopy={() => void copyRoomCode()}
+        onDisconnect={() => void disconnect()}
+      />
+    );
+  }
+
+  const headerTitle = connected
+    ? session.peerName || '对方'
+    : config.mode === 'create'
+      ? '等待对方加入…'
+      : '正在连接…';
+
   return (
     <main className="grid h-dvh w-full grid-rows-[auto_minmax(0,1fr)_auto_auto] bg-bg font-sans text-ink">
-      {needsNameSetup && <NameSetup onSave={saveNameFromSetup} />}
-      <header className="z-10 border-b border-line bg-surface/90 backdrop-blur">
-        <div className="flex items-baseline gap-3 px-4 pt-3">
-          <h1 id="app-title" className="m-0 flex items-center gap-2 text-lg font-semibold tracking-tight">
-            <span
-              aria-hidden
-              className="inline-block size-3 rounded-md bg-gradient-to-br from-accent to-over shadow-sm"
-            />
-            SecureChat 安全通话
-          </h1>
-          {session.peerName && (
-            <span className="truncate rounded-full bg-surface-muted px-2.5 py-1 text-xs text-ink-muted ring-1 ring-line">
-              对方：{session.peerName}
-            </span>
+      <h1 className="sr-only">SecureChat</h1>
+      <header className="z-10 flex items-center justify-between gap-3 border-b border-line bg-surface/90 px-4 py-2 backdrop-blur">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span
+            aria-hidden
+            className={`size-2.5 shrink-0 rounded-full ${
+              connected
+                ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]'
+                : 'animate-over-pulse bg-amber-400'
+            }`}
+          />
+          <div className="min-w-0">
+            <p className="m-0 truncate text-sm font-semibold leading-tight" aria-label="当前通话对象">
+              {headerTitle}
+            </p>
+            <p
+              className="m-0 truncate text-xs leading-tight text-ink-muted [overflow-wrap:anywhere]"
+              role="status"
+              aria-live="polite"
+            >
+              {session.status}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {session.generatedCode && (
+            <button type="button" className={buttonSecondary} onClick={() => void copyRoomCode()}>
+              复制房间码
+            </button>
+          )}
+          {connected && session.overPhase === 'idle' && !session.overEnding && (
+            <button type="button" className={buttonOver} onClick={() => void requestOver()}>
+              OVER
+            </button>
+          )}
+          {session.overPhase === 'waiting' && !session.overEnding && (
+            <div className="flex items-center gap-1.5 text-sm" role="status">
+              <span className="animate-over-pulse">OVER 已发出…</span>
+              <button type="button" className={buttonText} onClick={() => void cancelOver()}>
+                撤回
+              </button>
+            </div>
+          )}
+          {busy && (
+            <button type="button" className={buttonSecondary} onClick={() => void disconnect()}>
+              取消等待
+            </button>
           )}
         </div>
-        <ConnectionPanel
-          config={config}
-          hostIps={hostIps}
-          session={session}
-          onChange={changeConfig}
-          onSubmit={submitConnection}
-          onCopy={() => void copyRoomCode()}
-          onDisconnect={() => void disconnect()}
-          onOver={() => void requestOver()}
-          onCancelOver={() => void cancelOver()}
-        />
       </header>
 
       <MessageList
@@ -153,7 +173,7 @@ export default function App() {
         <span className="min-w-0 [overflow-wrap:anywhere]">
           {connected
             ? `加密纪元 ${session.epoch} · 密钥指纹 ${session.fingerprint} · ${formatCountdown(session.nextRotationUnixMs, now)} 后自动换钥`
-            : '尚未建立安全会话'}
+            : '正在建立安全会话…'}
         </span>
         <button
           type="button"

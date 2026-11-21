@@ -9,9 +9,6 @@ export type ConnectionState =
 export type OverKind = 'request' | 'accept' | 'reject' | 'cancel';
 
 export interface CreateRoomParams {
-  hostIp: string;
-  port: number;
-  rotationMinutes: number;
   displayName: string;
 }
 
